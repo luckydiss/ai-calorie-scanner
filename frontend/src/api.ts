@@ -94,7 +94,16 @@ function getTelegramInitData(): string {
     Telegram?: { WebApp?: { initData?: string; initDataUnsafe?: { user?: unknown } } };
   };
   const tg = (window as TgWindow).Telegram?.WebApp;
-  return tg?.initData?.trim() ?? "";
+  const direct = tg?.initData?.trim();
+  if (direct) return direct;
+
+  const fromHash = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("tgWebAppData")?.trim();
+  if (fromHash) return decodeURIComponent(fromHash);
+
+  const fromQuery = new URLSearchParams(window.location.search).get("tgWebAppData")?.trim();
+  if (fromQuery) return decodeURIComponent(fromQuery);
+
+  return "";
 }
 
 export async function bootstrapSession(): Promise<void> {
