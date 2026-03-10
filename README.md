@@ -46,10 +46,18 @@ chmod +x scripts/deploy-ubuntu.sh scripts/rollback-ubuntu.sh
 ./scripts/deploy-ubuntu.sh
 ```
 
+3. Optional: run Telegram bot service (sends WebApp button on `/start`):
+
+```bash
+docker-compose -f docker-compose.prod.yml up -d --build bot
+docker-compose -f docker-compose.prod.yml logs -f bot
+```
+
 3. Useful commands:
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.prod ps
 docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f backend
+docker-compose -f docker-compose.prod.yml logs -f bot
 ./scripts/rollback-ubuntu.sh
 ```

@@ -24,6 +24,7 @@ Database runtime:
 Required env for auth and scan:
 
 - `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_WEBAPP_URL` (required only for `app.bot` service)
 - `OPENROUTER_API_KEY`
 - `TELEGRAM_ALLOW_INSECURE_DEV=1` only for local development outside Telegram
 
@@ -115,3 +116,18 @@ alembic -c alembic.ini upgrade head
 Container runtime:
 
 - `backend/Dockerfile` runs `alembic upgrade head` on startup and then starts uvicorn on `0.0.0.0:8080`.
+
+## Telegram bot service
+
+The repository includes a lightweight Telegram bot worker (`python -m app.bot`) that:
+
+- receives updates via long polling (`getUpdates`)
+- handles `/start` and `/app`
+- sends inline button with `web_app` URL from `TELEGRAM_WEBAPP_URL`
+
+Run with Docker Compose:
+
+```bash
+docker-compose -f ../docker-compose.prod.yml up -d --build bot
+docker-compose -f ../docker-compose.prod.yml logs -f bot
+```
