@@ -94,14 +94,17 @@ function getTelegramInitData(): string {
     Telegram?: { WebApp?: { initData?: string; initDataUnsafe?: { user?: unknown } } };
   };
   const tg = (window as TgWindow).Telegram?.WebApp;
-  if (tg?.initData) return tg.initData;
-  return 'user={"id":999001,"first_name":"Demo","last_name":"User","username":"demo_user"}';
+  return tg?.initData?.trim() ?? "";
 }
 
 export async function bootstrapSession(): Promise<void> {
+  const initData = getTelegramInitData();
+  if (!initData) {
+    throw new Error("Telegram init data is missing. Open this app from Telegram bot button.");
+  }
   const auth = await request<{ accessToken: string }>("/auth/telegram/verify", {
     method: "POST",
-    body: JSON.stringify({ initData: getTelegramInitData() })
+    body: JSON.stringify({ initData })
   });
   accessToken = auth.accessToken;
 }
