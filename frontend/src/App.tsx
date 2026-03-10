@@ -91,7 +91,10 @@ function MacroBar(props: { label: string; value: number; goal: number; color: st
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm">
       <p className="text-xs uppercase tracking-wide text-slate-500">{props.label}</p>
-      <p className="mt-1 text-lg font-semibold text-ink">{props.value}g</p>
+      <div className="mt-1 flex items-baseline justify-between">
+        <p className="text-lg font-semibold text-ink">{props.value}g</p>
+        <p className="text-sm font-medium text-slate-400">{props.goal}g</p>
+      </div>
       <div className="mt-2 h-2 rounded bg-slate-100">
         <div className={`h-2 rounded ${props.color}`} style={{ width: `${percent}%` }} />
       </div>
