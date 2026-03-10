@@ -61,3 +61,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f backend
 docker-compose -f docker-compose.prod.yml logs -f bot
 ./scripts/rollback-ubuntu.sh
 ```
+
+Troubleshooting uploads:
+
+- If scan image upload fails with `413 Payload Too Large`, increase `client_max_body_size` in every Nginx layer (host proxy and frontend container). The frontend container config already sets `client_max_body_size 25M`.
