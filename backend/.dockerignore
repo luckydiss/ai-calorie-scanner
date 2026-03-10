@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.tmp/
+tests/
+backend.log
+backend.err.log
+.env
+calorie_food_backend.egg-info/

@@ -1,0 +1,15 @@
+README.md
+pyproject.toml
+app/__init__.py
+app/ai.py
+app/config.py
+app/db.py
+app/main.py
+app/rate_limit.py
+app/telegram_auth.py
+calorie_food_backend.egg-info/PKG-INFO
+calorie_food_backend.egg-info/SOURCES.txt
+calorie_food_backend.egg-info/dependency_links.txt
+calorie_food_backend.egg-info/requires.txt
+calorie_food_backend.egg-info/top_level.txt
+tests/test_api.py

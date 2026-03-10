@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "calorie-food-backend"
+version = "0.1.0"
+description = "Phase 2 backend for Telegram calorie mini app"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.116.0",
+  "uvicorn>=0.35.0",
+  "pydantic>=2.11.0",
+  "python-multipart>=0.0.20",
+  "httpx>=0.28.0",
+  "psycopg[binary]>=3.2.0",
+  "alembic>=1.13.0",
+  "SQLAlchemy>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
