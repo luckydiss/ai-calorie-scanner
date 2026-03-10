@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, TouchEvent, useEffect, useRef, useState } from "react";
 import {
   api,
   bootstrapSession,
@@ -139,26 +139,99 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
   );
 }
 
-function DailyLogView({ meals }: { meals: Meal[] }) {
+function SwipeMealRow(props: {
+  meal: Meal;
+  deleting: boolean;
+  onDelete: (mealId: string) => Promise<void>;
+}) {
+  const swipeStartXRef = useRef<number | null>(null);
+  const [dragOffsetX, setDragOffsetX] = useState(0);
+  const [revealed, setRevealed] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const actionWidth = 96;
+  const revealThreshold = 64;
+  const mealCalories = props.meal.items.reduce((acc, item) => acc + item.calories, 0);
+
+  function onTouchStart(e: TouchEvent<HTMLElement>) {
+    swipeStartXRef.current = e.touches[0]?.clientX ?? null;
+    setDragging(true);
+  }
+
+  function onTouchMove(e: TouchEvent<HTMLElement>) {
+    if (swipeStartXRef.current === null) return;
+    const currentX = e.touches[0]?.clientX ?? swipeStartXRef.current;
+    const deltaX = currentX - swipeStartXRef.current;
+    let nextOffset = deltaX;
+    if (revealed) nextOffset -= actionWidth;
+    if (nextOffset > 0) nextOffset = 0;
+    if (nextOffset < -actionWidth) nextOffset = -actionWidth;
+    setDragOffsetX(nextOffset);
+  }
+
+  function onTouchEnd() {
+    const shouldReveal = dragOffsetX <= -revealThreshold;
+    setRevealed(shouldReveal);
+    setDragOffsetX(shouldReveal ? -actionWidth : 0);
+    swipeStartXRef.current = null;
+    setDragging(false);
+  }
+
+  const translateX = dragging ? dragOffsetX : revealed ? -actionWidth : 0;
+
+  return (
+    <div className="relative overflow-hidden rounded-xl">
+      <div className="absolute inset-y-0 right-0 flex w-24 items-stretch justify-end">
+        <button
+          className="h-full w-24 bg-red-500 px-3 text-xs font-semibold text-white disabled:opacity-60"
+          disabled={props.deleting}
+          onClick={() => {
+            void props.onDelete(props.meal.id);
+          }}
+          type="button"
+        >
+          {props.deleting ? "Deleting..." : "Delete"}
+        </button>
+      </div>
+      <article
+        className="rounded-xl border border-slate-100 bg-white p-3 select-none touch-pan-y"
+        onTouchEnd={onTouchEnd}
+        onTouchMove={onTouchMove}
+        onTouchStart={onTouchStart}
+        style={{
+          transform: `translateX(${translateX}px)`,
+          transition: dragging ? "none" : "transform 0.2s ease-out"
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="font-medium text-ink">{props.meal.title}</h3>
+          <span className="text-sm font-semibold text-primary">{mealCalories} kcal</span>
+        </div>
+        <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">
+          {props.meal.mealType} - {formatTime(props.meal.eatenAt)}
+        </p>
+      </article>
+    </div>
+  );
+}
+
+function DailyLogView(props: {
+  meals: Meal[];
+  deletingMealId: string | null;
+  onDeleteMeal: (mealId: string) => Promise<void>;
+}) {
   return (
     <section className="rounded-3xl bg-white p-5 shadow-sm">
       <h2 className="text-lg font-semibold text-ink">Daily Log</h2>
       <div className="mt-4 space-y-3">
-        {meals.length === 0 && <p className="text-sm text-slate-500">No meals logged today.</p>}
-        {meals.map((meal) => {
-          const mealCalories = meal.items.reduce((acc, item) => acc + item.calories, 0);
-          return (
-            <article key={meal.id} className="rounded-xl border border-slate-100 p-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium text-ink">{meal.title}</h3>
-                <span className="text-sm font-semibold text-primary">{mealCalories} kcal</span>
-              </div>
-              <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">
-                {meal.mealType} - {formatTime(meal.eatenAt)}
-              </p>
-            </article>
-          );
-        })}
+        {props.meals.length === 0 && <p className="text-sm text-slate-500">No meals logged today.</p>}
+        {props.meals.map((meal) => (
+          <SwipeMealRow
+            key={meal.id}
+            deleting={props.deletingMealId === meal.id}
+            meal={meal}
+            onDelete={props.onDeleteMeal}
+          />
+        ))}
       </div>
     </section>
   );
@@ -825,6 +898,7 @@ export function App() {
   const [success, setSuccess] = useState<string | null>(null);
   const [savingOnboarding, setSavingOnboarding] = useState(false);
   const [savingMeal, setSavingMeal] = useState(false);
+  const [deletingMealId, setDeletingMealId] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [confirmingScan, setConfirmingScan] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
@@ -977,6 +1051,21 @@ export function App() {
       setError(e instanceof Error ? e.message : "Failed to add meal");
     } finally {
       setSavingMeal(false);
+    }
+  }
+
+  async function deleteMeal(mealId: string) {
+    setError(null);
+    setSuccess(null);
+    setDeletingMealId(mealId);
+    try {
+      await api.deleteMeal(mealId);
+      await loadAll();
+      setSuccess("Meal deleted");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete meal");
+    } finally {
+      setDeletingMealId(null);
     }
   }
 
@@ -1221,7 +1310,9 @@ export function App() {
       {!loading && dashboard && (
         <>
           {tab === "dashboard" && <DashboardView dashboard={dashboard} />}
-          {tab === "daily-log" && <DailyLogView meals={meals} />}
+          {tab === "daily-log" && (
+            <DailyLogView deletingMealId={deletingMealId} meals={meals} onDeleteMeal={deleteMeal} />
+          )}
           {tab === "onboarding" && (
             <OnboardingView
               form={onboardingForm}

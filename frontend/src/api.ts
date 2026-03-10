@@ -147,6 +147,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  deleteMeal: (mealId: string) =>
+    request<void>(`/meals/${mealId}`, {
+      method: "DELETE"
+    }),
   createScan: (image: File | null, description: string) => {
     const form = new FormData();
     if (image) form.append("image", image);
