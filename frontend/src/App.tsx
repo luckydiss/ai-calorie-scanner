@@ -12,7 +12,7 @@ import {
   type ScanStatus
 } from "./api";
 
-type Tab = "dashboard" | "daily-log" | "scanner" | "onboarding" | "add-meal";
+type Tab = "dashboard" | "daily-log" | "quick-add" | "onboarding" | "add-meal";
 
 type OnboardingForm = {
   timezone: string;
@@ -221,11 +221,178 @@ function DailyLogView(props: {
   meals: Meal[];
   deletingMealId: string | null;
   onDeleteMeal: (mealId: string) => Promise<void>;
+  pendingScan: ScanStatus | null;
+  pendingConfirmForm: ScanConfirmForm;
+  confirmingPendingScan: boolean;
+  recalculatingPendingScan: boolean;
+  onPendingConfirmChange: (patch: Partial<ScanConfirmForm>) => void;
+  onPendingConfirm: () => Promise<void>;
+  onPendingUseAsIs: () => Promise<void>;
+  onPendingRecalculate: (comment: string) => Promise<void>;
 }) {
+  const [draftExpanded, setDraftExpanded] = useState(false);
+  const [recalculateComment, setRecalculateComment] = useState("");
+  const draftResult =
+    props.pendingScan?.status === "succeeded" && props.pendingScan.result ? props.pendingScan.result : null;
+
+  async function submitPendingConfirm(e: FormEvent) {
+    e.preventDefault();
+    await props.onPendingConfirm();
+  }
+
   return (
     <section className="rounded-3xl bg-white p-5 shadow-sm">
       <h2 className="text-lg font-semibold text-ink">Daily Log</h2>
       <div className="mt-4 space-y-3">
+        {draftResult && (
+          <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+            <button
+              className="w-full text-left"
+              onClick={() => setDraftExpanded((prev) => !prev)}
+              type="button"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium text-ink">AI Draft: {draftResult.dishName}</h3>
+                <span className="text-sm font-semibold text-primary">{draftResult.calories} kcal</span>
+              </div>
+              <p className="mt-1 text-xs text-slate-600">
+                Tap to {draftExpanded ? "hide" : "edit"} and send recalculation comment
+              </p>
+            </button>
+            {draftExpanded && (
+              <form className="mt-3 space-y-3 rounded-lg border border-slate-200 bg-white p-3" onSubmit={submitPendingConfirm}>
+                <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
+                  <p>
+                    Confidence: <span className="font-semibold">{Math.round(draftResult.confidence * 100)}%</span>
+                  </p>
+                  {draftResult.alternatives.length > 0 && (
+                    <p className="mt-1">
+                      Alternatives: <span className="font-medium">{draftResult.alternatives.join(", ")}</span>
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Comment for recalculation
+                  </label>
+                  <textarea
+                    className="min-h-16 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    placeholder="e.g. add avocado and olive oil"
+                    value={recalculateComment}
+                    onChange={(e) => setRecalculateComment(e.target.value)}
+                  />
+                  <button
+                    className="w-full rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-60"
+                    disabled={props.recalculatingPendingScan || !recalculateComment.trim()}
+                    onClick={() => {
+                      void props.onPendingRecalculate(recalculateComment.trim());
+                      setRecalculateComment("");
+                    }}
+                    type="button"
+                  >
+                    {props.recalculatingPendingScan ? "Recalculating..." : "Recalculate by comment"}
+                  </button>
+                </div>
+                <label className="block text-sm text-slate-600">
+                  Title
+                  <input
+                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+                    value={props.pendingConfirmForm.title}
+                    onChange={(e) => props.onPendingConfirmChange({ title: e.target.value })}
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-sm text-slate-600">
+                    Meal type
+                    <select
+                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+                      value={props.pendingConfirmForm.mealType}
+                      onChange={(e) => props.onPendingConfirmChange({ mealType: e.target.value as MealType })}
+                    >
+                      <option value="breakfast">Breakfast</option>
+                      <option value="lunch">Lunch</option>
+                      <option value="dinner">Dinner</option>
+                      <option value="snack">Snack</option>
+                    </select>
+                  </label>
+                  <label className="text-sm text-slate-600">
+                    Time
+                    <input
+                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+                      type="datetime-local"
+                      value={props.pendingConfirmForm.eatenAt}
+                      onChange={(e) => props.onPendingConfirmChange({ eatenAt: e.target.value })}
+                    />
+                  </label>
+                  <label className="col-span-2 text-sm text-slate-600">
+                    Item name
+                    <input
+                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+                      value={props.pendingConfirmForm.itemName}
+                      onChange={(e) => props.onPendingConfirmChange({ itemName: e.target.value })}
+                    />
+                  </label>
+                  <label className="text-sm text-slate-600">
+                    Calories
+                    <input
+                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+                      type="number"
+                      value={props.pendingConfirmForm.calories}
+                      onChange={(e) => props.onPendingConfirmChange({ calories: e.target.value })}
+                    />
+                  </label>
+                  <label className="text-sm text-slate-600">
+                    Protein (g)
+                    <input
+                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+                      type="number"
+                      step="0.1"
+                      value={props.pendingConfirmForm.proteinG}
+                      onChange={(e) => props.onPendingConfirmChange({ proteinG: e.target.value })}
+                    />
+                  </label>
+                  <label className="text-sm text-slate-600">
+                    Carbs (g)
+                    <input
+                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+                      type="number"
+                      step="0.1"
+                      value={props.pendingConfirmForm.carbsG}
+                      onChange={(e) => props.onPendingConfirmChange({ carbsG: e.target.value })}
+                    />
+                  </label>
+                  <label className="text-sm text-slate-600">
+                    Fat (g)
+                    <input
+                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+                      type="number"
+                      step="0.1"
+                      value={props.pendingConfirmForm.fatG}
+                      onChange={(e) => props.onPendingConfirmChange({ fatG: e.target.value })}
+                    />
+                  </label>
+                </div>
+                <button
+                  className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                  disabled={props.confirmingPendingScan}
+                  type="submit"
+                >
+                  {props.confirmingPendingScan ? "Saving..." : "Confirm and add meal"}
+                </button>
+                <button
+                  className="w-full rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 disabled:opacity-60"
+                  disabled={props.confirmingPendingScan}
+                  onClick={() => {
+                    void props.onPendingUseAsIs();
+                  }}
+                  type="button"
+                >
+                  Use as is
+                </button>
+              </form>
+            )}
+          </div>
+        )}
         {props.meals.length === 0 && <p className="text-sm text-slate-500">No meals logged today.</p>}
         {props.meals.map((meal) => (
           <SwipeMealRow
@@ -467,25 +634,17 @@ function ScannerView(props: {
   scanning: boolean;
   scanProgress: number;
   elapsedSeconds: number;
-  confirmForm: ScanConfirmForm;
-  confirming: boolean;
-  recalculating: boolean;
   onPickFile: (file: File | null) => void;
   onDescriptionChange: (value: string) => void;
   onScan: () => Promise<void>;
   onRetry: () => Promise<void>;
   onCancel: () => void | Promise<void>;
   onFallbackToManual: () => void;
-  onUseAsIs: () => Promise<void>;
-  onRecalculate: (comment: string) => Promise<void>;
-  onConfirmChange: (patch: Partial<ScanConfirmForm>) => void;
-  onConfirm: () => Promise<void>;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [comment, setComment] = useState("");
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraBusy, setCameraBusy] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
@@ -581,16 +740,11 @@ function ScannerView(props: {
     }
   }
 
-  async function submitConfirm(e: FormEvent) {
-    e.preventDefault();
-    await props.onConfirm();
-  }
-
   return (
     <section className="space-y-4 rounded-3xl bg-white p-5 shadow-sm">
-      <h2 className="text-lg font-semibold text-ink">AI Scanner</h2>
+      <h2 className="text-lg font-semibold text-ink">Add with AI</h2>
       <label className="block text-sm text-slate-600">
-        Text description (optional, can scan without photo)
+        Describe food with text (optional)
         <textarea
           className="mt-1 min-h-20 w-full rounded-xl border border-slate-200 px-3 py-2"
           placeholder="E.g. Chicken salad, olive oil dressing, one slice of bread"
@@ -708,7 +862,9 @@ function ScannerView(props: {
             <p className="mt-1 text-xs text-slate-600">Analyzing image with AI model.</p>
           )}
           {props.scanStatus.status === "succeeded" && (
-            <p className="mt-1 text-xs text-emerald-700">Scan finished. Review and confirm below.</p>
+            <p className="mt-1 text-xs text-emerald-700">
+              Scan finished. Open Daily Log to review, edit, and confirm.
+            </p>
           )}
           {props.scanStatus.status === "cancelled" && (
             <p className="mt-1 text-xs text-slate-600">Scan canceled by user.</p>
@@ -739,141 +895,6 @@ function ScannerView(props: {
             </>
           )}
         </div>
-      )}
-
-      {props.scanStatus?.status === "succeeded" && props.scanStatus.result && (
-        <form className="space-y-3 rounded-xl border border-slate-200 p-3" onSubmit={submitConfirm}>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Confirm meal</h3>
-          <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
-            <p>
-              Confidence: <span className="font-semibold">{Math.round(props.scanStatus.result.confidence * 100)}%</span>
-            </p>
-            {props.scanStatus.result.alternatives.length > 0 && (
-              <p className="mt-1">
-                Alternatives:{" "}
-                <span className="font-medium">{props.scanStatus.result.alternatives.join(", ")}</span>
-              </p>
-            )}
-          </div>
-          <div className="space-y-2 rounded-lg border border-slate-200 p-3">
-            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Comment for recalculation
-            </label>
-            <textarea
-              className="min-h-16 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              placeholder="e.g. actually this is with avocado and extra olive oil"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-            />
-            <button
-              className="w-full rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-60"
-              disabled={props.recalculating || !comment.trim()}
-              onClick={() => {
-                void props.onRecalculate(comment.trim());
-                setComment("");
-              }}
-              type="button"
-            >
-              {props.recalculating ? "Recalculating..." : "Recalculate by comment"}
-            </button>
-          </div>
-          <label className="block text-sm text-slate-600">
-            Title
-            <input
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-              value={props.confirmForm.title}
-              onChange={(e) => props.onConfirmChange({ title: e.target.value })}
-            />
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="text-sm text-slate-600">
-              Meal type
-              <select
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-                value={props.confirmForm.mealType}
-                onChange={(e) => props.onConfirmChange({ mealType: e.target.value as MealType })}
-              >
-                <option value="breakfast">Breakfast</option>
-                <option value="lunch">Lunch</option>
-                <option value="dinner">Dinner</option>
-                <option value="snack">Snack</option>
-              </select>
-            </label>
-            <label className="text-sm text-slate-600">
-              Time
-              <input
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-                type="datetime-local"
-                value={props.confirmForm.eatenAt}
-                onChange={(e) => props.onConfirmChange({ eatenAt: e.target.value })}
-              />
-            </label>
-            <label className="col-span-2 text-sm text-slate-600">
-              Item name
-              <input
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-                value={props.confirmForm.itemName}
-                onChange={(e) => props.onConfirmChange({ itemName: e.target.value })}
-              />
-            </label>
-            <label className="text-sm text-slate-600">
-              Calories
-              <input
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-                type="number"
-                value={props.confirmForm.calories}
-                onChange={(e) => props.onConfirmChange({ calories: e.target.value })}
-              />
-            </label>
-            <label className="text-sm text-slate-600">
-              Protein (g)
-              <input
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-                type="number"
-                step="0.1"
-                value={props.confirmForm.proteinG}
-                onChange={(e) => props.onConfirmChange({ proteinG: e.target.value })}
-              />
-            </label>
-            <label className="text-sm text-slate-600">
-              Carbs (g)
-              <input
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-                type="number"
-                step="0.1"
-                value={props.confirmForm.carbsG}
-                onChange={(e) => props.onConfirmChange({ carbsG: e.target.value })}
-              />
-            </label>
-            <label className="text-sm text-slate-600">
-              Fat (g)
-              <input
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-                type="number"
-                step="0.1"
-                value={props.confirmForm.fatG}
-                onChange={(e) => props.onConfirmChange({ fatG: e.target.value })}
-              />
-            </label>
-          </div>
-          <button
-            className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
-            disabled={props.confirming}
-            type="submit"
-          >
-            {props.confirming ? "Saving..." : "Confirm and add meal"}
-          </button>
-          <button
-            className="w-full rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 disabled:opacity-60"
-            disabled={props.confirming}
-            onClick={() => {
-              void props.onUseAsIs();
-            }}
-            type="button"
-          >
-            Use as is
-          </button>
-        </form>
       )}
     </section>
   );
@@ -1052,6 +1073,7 @@ export function App() {
       setTab("daily-log");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add meal");
+      setTab("daily-log");
     } finally {
       setSavingMeal(false);
     }
@@ -1091,6 +1113,28 @@ export function App() {
       fatG: ""
     });
     setScanPreview(file ? URL.createObjectURL(file) : null);
+  }
+
+  function resetScanComposer() {
+    const nextDateTime = currentDatetimeLocal();
+    const nextMealType = detectMealTypeFromLocalDatetime(nextDateTime);
+    if (scanPreview) URL.revokeObjectURL(scanPreview);
+    setScanFile(null);
+    setScanDescription("");
+    setScanPreview(null);
+    setScanProgress(0);
+    setScanElapsedSeconds(0);
+    setScanStatus(null);
+    setScanConfirmForm({
+      title: "",
+      mealType: nextMealType,
+      eatenAt: nextDateTime,
+      itemName: "",
+      calories: "",
+      proteinG: "",
+      carbsG: "",
+      fatG: ""
+    });
   }
 
   async function startScan() {
@@ -1144,17 +1188,22 @@ export function App() {
           carbsG: String(status.result.carbsG),
           fatG: String(status.result.fatG)
         });
+        setSuccess("AI draft is ready. Review it in Daily Log.");
+        setTab("daily-log");
       }
       if (status.status === "failed") {
         setScanProgress(100);
         setError(`Scan failed: ${status.errorCode ?? "unknown_error"}`);
+        setTab("daily-log");
       }
       if (status.status === "cancelled") {
         setScanProgress(100);
         setSuccess("Scan canceled");
+        setTab("daily-log");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Scan failed");
+      setTab("daily-log");
     } finally {
       setScanning(false);
       setActiveScanId(null);
@@ -1198,10 +1247,12 @@ export function App() {
         ]
       });
       await loadAll();
+      resetScanComposer();
       setSuccess("Scanned meal added");
       setTab("daily-log");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to confirm scan");
+      setTab("daily-log");
     } finally {
       setConfirmingScan(false);
     }
@@ -1241,10 +1292,12 @@ export function App() {
         ]
       });
       await loadAll();
+      resetScanComposer();
       setSuccess("Scanned meal added");
       setTab("daily-log");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to confirm scan");
+      setTab("daily-log");
     } finally {
       setConfirmingScan(false);
     }
@@ -1268,9 +1321,12 @@ export function App() {
           fatG: String(updated.result?.fatG ?? prev.fatG)
         }));
       }
+      await loadAll();
       setSuccess("Scan recalculated");
+      setTab("daily-log");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to recalculate scan");
+      setTab("daily-log");
     } finally {
       setRecalculatingScan(false);
     }
@@ -1314,7 +1370,19 @@ export function App() {
         <>
           {tab === "dashboard" && <DashboardView dashboard={dashboard} />}
           {tab === "daily-log" && (
-            <DailyLogView deletingMealId={deletingMealId} meals={meals} onDeleteMeal={deleteMeal} />
+            <DailyLogView
+              deletingMealId={deletingMealId}
+              meals={meals}
+              onDeleteMeal={deleteMeal}
+              pendingScan={scanStatus}
+              pendingConfirmForm={scanConfirmForm}
+              confirmingPendingScan={confirmingScan}
+              recalculatingPendingScan={recalculatingScan}
+              onPendingConfirmChange={(patch) => setScanConfirmForm((prev) => ({ ...prev, ...patch }))}
+              onPendingConfirm={confirmScan}
+              onPendingUseAsIs={useScanAsIs}
+              onPendingRecalculate={recalculateScan}
+            />
           )}
           {tab === "onboarding" && (
             <OnboardingView
@@ -1332,7 +1400,7 @@ export function App() {
               onSubmit={submitMeal}
             />
           )}
-          {tab === "scanner" && (
+          {tab === "quick-add" && (
             <ScannerView
               imagePreview={scanPreview}
               fileName={scanFile?.name ?? null}
@@ -1341,19 +1409,12 @@ export function App() {
               scanning={scanning}
               scanProgress={scanProgress}
               elapsedSeconds={scanElapsedSeconds}
-              confirmForm={scanConfirmForm}
-              confirming={confirmingScan}
-              recalculating={recalculatingScan}
               onPickFile={onPickScanFile}
               onDescriptionChange={setScanDescription}
               onScan={startScan}
               onRetry={startScan}
               onCancel={cancelScan}
               onFallbackToManual={fallbackToManualMeal}
-              onUseAsIs={useScanAsIs}
-              onRecalculate={recalculateScan}
-              onConfirmChange={(patch) => setScanConfirmForm((prev) => ({ ...prev, ...patch }))}
-              onConfirm={confirmScan}
             />
           )}
         </>
@@ -1379,13 +1440,17 @@ export function App() {
           Daily Log
         </button>
         <button
-          className={`rounded-xl px-2 py-2 text-xs font-medium ${
-            tab === "scanner" ? "bg-primary text-white" : "bg-slate-100 text-slate-700"
+          aria-label="Quick add"
+          className={`quick-add-cta -mt-7 flex h-16 flex-col items-center justify-center rounded-full px-0 py-0 text-xs font-bold ${
+            tab === "quick-add"
+              ? "quick-add-cta-active text-white"
+              : "bg-gradient-to-br from-amber-300 via-orange-300 to-rose-300 text-ink"
           }`}
-          onClick={() => setTab("scanner")}
+          onClick={() => setTab("quick-add")}
           type="button"
         >
-          Scanner
+          <span className="text-2xl leading-none">+</span>
+          <span className="text-[10px] uppercase tracking-wide">Add</span>
         </button>
         <button
           className={`rounded-xl px-2 py-2 text-xs font-medium ${
