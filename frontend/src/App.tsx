@@ -747,8 +747,8 @@ function ScannerView(props: {
   }
 
   return (
-    <section className="space-y-4 rounded-3xl bg-white p-5 shadow-sm">
-      <h2 className="text-lg font-semibold text-ink">Add with AI</h2>
+    <section className="quick-add-sheet space-y-4 rounded-[28px] bg-white p-5 shadow-sm">
+      <h2 className="text-xl font-semibold text-ink">Add with AI</h2>
       <label className="block text-sm text-slate-600">
         Describe food with text (optional)
         <textarea
@@ -825,7 +825,7 @@ function ScannerView(props: {
         <img alt="Meal preview" className="h-48 w-full rounded-xl object-cover" src={props.imagePreview} />
       )}
       <button
-        className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+        className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.32)] disabled:opacity-60"
         disabled={props.scanning || (!props.fileName && !props.description.trim())}
         onClick={() => {
           void props.onScan();
@@ -1426,10 +1426,10 @@ export function App() {
         </>
       )}
 
-      <nav className="fixed bottom-0 left-1/2 grid w-full max-w-md -translate-x-1/2 grid-cols-5 gap-2 border-t border-slate-200 bg-white p-3">
+      <nav className="bottom-nav fixed bottom-0 left-1/2 grid w-full max-w-md -translate-x-1/2 grid-cols-5 gap-2 border-t border-slate-200 bg-white p-3">
         <button
-          className={`rounded-xl px-2 py-2 text-xs font-medium ${
-            tab === "dashboard" ? "bg-primary text-white" : "bg-slate-100 text-slate-700"
+          className={`nav-chip px-2 py-2 text-xs font-medium ${
+            tab === "dashboard" ? "nav-chip-active text-white" : "text-slate-700"
           }`}
           onClick={() => setTab("dashboard")}
           type="button"
@@ -1437,8 +1437,8 @@ export function App() {
           Dashboard
         </button>
         <button
-          className={`rounded-xl px-2 py-2 text-xs font-medium ${
-            tab === "daily-log" ? "bg-primary text-white" : "bg-slate-100 text-slate-700"
+          className={`nav-chip px-2 py-2 text-xs font-medium ${
+            tab === "daily-log" ? "nav-chip-active text-white" : "text-slate-700"
           }`}
           onClick={() => setTab("daily-log")}
           type="button"
@@ -1447,7 +1447,7 @@ export function App() {
         </button>
         <button
           aria-label="Quick add"
-          className={`quick-add-cta -mt-7 flex h-16 flex-col items-center justify-center rounded-full px-0 py-0 text-xs font-bold ${
+          className={`quick-add-cta quick-add-cta-ring -mt-7 flex h-16 flex-col items-center justify-center rounded-full px-0 py-0 text-xs font-bold ${
             tab === "quick-add"
               ? "quick-add-cta-active text-white"
               : "bg-gradient-to-br from-amber-300 via-orange-300 to-rose-300 text-ink"
@@ -1459,8 +1459,8 @@ export function App() {
           <span className="text-[10px] uppercase tracking-wide">Add</span>
         </button>
         <button
-          className={`rounded-xl px-2 py-2 text-xs font-medium ${
-            tab === "add-meal" ? "bg-primary text-white" : "bg-slate-100 text-slate-700"
+          className={`nav-chip px-2 py-2 text-xs font-medium ${
+            tab === "add-meal" ? "nav-chip-active text-white" : "text-slate-700"
           }`}
           onClick={() => setTab("add-meal")}
           type="button"
@@ -1468,8 +1468,8 @@ export function App() {
           Add Meal
         </button>
         <button
-          className={`rounded-xl px-2 py-2 text-xs font-medium ${
-            tab === "onboarding" ? "bg-primary text-white" : "bg-slate-100 text-slate-700"
+          className={`nav-chip px-2 py-2 text-xs font-medium ${
+            tab === "onboarding" ? "nav-chip-active text-white" : "text-slate-700"
           }`}
           onClick={() => setTab("onboarding")}
           type="button"
