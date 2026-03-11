@@ -1,164 +1,189 @@
-# E-Commerce Multi-Agent Assistant
+# Calorie Food Telegram Mini App
 
-E-commerce ассистент в формате монорепозитория: пользователь работает в Streamlit UI, backend на FastAPI запускает граф агентов в LangGraph, агенты обращаются к RAG и операционным БД, а результат приходит в интерфейс потоково через SSE.
+AI-powered calorie assistant для Telegram Mini App: пользователь логирует еду текстом/фото, backend на FastAPI обрабатывает сканы через OpenRouter, а React WebApp показывает Dashboard и Daily Log.
 
-[![Live Demo](https://img.shields.io/badge/%F0%9F%9A%80%20Live%20Demo-Try%20it%20now-brightgreen?style=for-the-badge)](http://luckydiss-rag-agents.duckdns.org:8501/)
+[![Live Demo](https://img.shields.io/badge/%F0%9F%9A%80%20Live%20Demo-Open%20Mini%20App-brightgreen?style=for-the-badge)](https://ai-calorie.duckdns.org)
 
 ---
 
-![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
-![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)
-![LangGraph](https://img.shields.io/badge/LangGraph-LangChain-1C3C3C?style=flat-square&logo=chainlink&logoColor=white)
-![Qdrant](https://img.shields.io/badge/Qdrant-Vector%20DB-DC244C?style=flat-square&logo=databricks&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-7-646CFF?style=flat-square&logo=vite&logoColor=white)
+![Telegram](https://img.shields.io/badge/Telegram-Mini%20App-26A5E4?style=flat-square&logo=telegram&logoColor=white)
+![OpenRouter](https://img.shields.io/badge/OpenRouter-AI-000000?style=flat-square)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)
-![LangSmith](https://img.shields.io/badge/LangSmith-Tracing-FF6B35?style=flat-square&logo=langchain&logoColor=white)
 
 ---
 
-## Модуль данных
+## Product Scope
 
-В основе лежат данные Amazon Reviews 2023 (категория Electronics): карточки товаров и отзывы. Перед использованием данные были очищены и отфильтрованы: оставлены валидные товарные карточки, релевантные категории и товары с достаточным количеством отзывов. Для стабильной разработки использовался рабочий сэмпл на 1000 товаров. Подготовленные артефакты были приведены к удобному формату для загрузки в векторное хранилище.
+MVP закрывает основные пользовательские сценарии:
 
-## RAG модуль
+- Telegram auth через `initData`
+- Dashboard по калориям и БЖУ
+- Daily Log с удалением приемов пищи
+- AI scan (фото + текст или текст-only)
+- Подтверждение/перерасчет AI результата
+- Manual fallback для добавления еды
 
-RAG отвечает за поиск релевантного товарного и review-контекста для ответов ассистента. В качестве векторной базы используется Qdrant, в системе задействованы коллекции:
+Подробности продукта: `docs/PRD.md`.
 
-- `Amazon-items-collection-01-hybrid-search`
-- `Amazon-items-collection-01-reviews`
+## Architecture
 
-Поиск построен как hybrid retrieval: dense embeddings + BM25 с fusion. На выходе модуль формирует контекст для генерации ответа и список используемых reference-товаров.
+Текущая архитектура:
 
-## Агентный модуль
+- `frontend` - React + TypeScript + Vite + Tailwind
+- `backend` - FastAPI + Alembic + PostgreSQL
+- `bot` - Telegram bot worker (`python -m app.bot`, long polling)
+- `nginx` - static frontend + reverse proxy `/api`
 
-Оркестрация собрана на `StateGraph`.
-Точка входа графа: `START -> coordinator_agent`.
-Coordinator выбирает следующего исполнителя, специализированные агенты работают в цикле `agent -> tool_node -> agent`, а состояние диалога сохраняется через `PostgresSaver` и `thread_id`.
-
-В системе четыре агента:
-
-- `coordinator_agent`  
-  Отвечает за общий план, делегирование и завершение сценария. Прямых инструментов не вызывает.
-
-- `product_qa_agent`  
-  Ведет товарный диалог: характеристики, сравнения, отзывы, подбор. Использует инструменты:
-  - `get_formatted_items_context(query, top_k)`
-  - `get_formatted_reviews_context(query, item_list, top_k)`
-
-- `shopping_cart_agent`  
-  Управляет корзиной пользователя, где `thread_id` выступает как `user_id` и `cart_id`. Использует инструменты:
-  - `add_to_shopping_cart(items, user_id, cart_id)`
-  - `remove_from_cart(product_id, user_id, cart_id)`
-  - `get_shopping_cart(user_id, cart_id)`
-
-- `warehouse_manager_agent`  
-  Работает со складской доступностью и резервами. Использует инструменты:
-  - `check_warehouse_availability(items)`
-  - `reserve_warehouse_items(reservations)`
+Архитектурные решения: `docs/adr/`.
 
 ## Backend (FastAPI)
 
-Backend предоставляет два публичных endpoint:
+Реализованные endpoints:
 
-- `POST /agent` - запускает workflow и возвращает `text/event-stream`
-- `POST /submit_feedback` - принимает оценку/комментарий и отправляет в LangSmith
+- `POST /auth/telegram/verify`
+- `POST /auth/logout`
+- `POST /auth/logout-all`
+- `GET/PUT /profile`
+- `GET/PUT /goals`
+- `GET/POST /meals`
+- `PATCH/DELETE /meals/{meal_id}`
+- `GET /dashboard`
+- `POST /scans`
+- `GET /scans/{scan_id}`
+- `POST /scans/{scan_id}/confirm`
+- `POST /scans/{scan_id}/cancel`
+- `POST /scans/{scan_id}/recalculate`
+- `GET /health/live`
+- `GET /health/ready`
+- `GET /metrics`
 
-Поток `/agent` содержит промежуточные статусные сообщения и финальное событие `final_result` с полями:
+API контракт: `backend/openapi.yaml`.
 
-- `answer`
-- `used_context`
-- `trace_id`
-- `shopping_cart`
+## Frontend (React Mini App)
 
-## Frontend (Streamlit)
+Основные экраны и UX:
 
-Frontend отправляет запросы в `/agent`, читает SSE-поток, отображает прогресс выполнения, итоговый ответ, найденные товары и текущее состояние корзины. Отдельно поддержан feedback-цикл (thumbs up/down + текст), который уходит в `/submit_feedback`.
+- `Dashboard` (дневной прогресс по калориям/макросам)
+- `Daily Log` (список приемов пищи, swipe-delete, Б/Ж/У по позиции)
+- центральная CTA-кнопка `+` (quick add)
+- `Add with AI` (камера/галерея/текст)
+- `AI Draft` в Daily Log с перерасчетом и подтверждением
+- `Onboarding` и `Add Meal` (manual entry)
 
-## Хранилища и операционные данные
+## AI Scan Flow
 
-Система использует PostgreSQL в двух ролях:
+1. Пользователь отправляет фото или описание.
+2. Backend создает `scan_job` и запускает обработку через OpenRouter.
+3. Frontend поллит статус: `queued -> processing -> succeeded|failed|cancelled`.
+4. При `succeeded` создается AI draft, пользователь может:
+   - пересчитать по комментарию (`/recalculate`)
+   - подтвердить и добавить meal (`/confirm`)
+5. После подтверждения обновляются Daily Log и Dashboard.
 
-- `langgraph_db` - checkpointing графа и память диалогов
-- `tools_database` - прикладные данные инструментов (корзина и склад)
+## Data Model
 
-Рабочие таблицы:
+Ключевые таблицы:
 
-- `shopping_carts.shopping_cart_items`
-- `warehouses.inventory`
+- `users`, `profiles`, `daily_goals`
+- `meals`, `meal_items`, `daily_summaries`
+- `scan_jobs`, `scan_results`
+- `sessions`, `events`, `streaks`, `achievements`, `user_achievements`
 
-SQL-схемы находятся в:
+ERD: `docs/erd.md`.  
+Миграции: `backend/alembic_migrations/`.
 
-- `scripts/sql/shopping_cart_table.sql`
-- `scripts/sql/warehouse_management.sql`
-
-## Наблюдаемость и оценка качества
-
-Для трассировок и feedback используется LangSmith. Для оценки retrieval/answer есть отдельный eval-скрипт:
-
-- `apps/api/evals/eval_retriever.py`
-
-Запуск:
-
-```bash
-make run-evals-retriever
-```
-
-## Поток пользовательского запроса
-
-![Sequence Diagram](sequence_diagram.png)
-
-1. Пользователь вводит сообщение в Streamlit UI.
-2. UI отправляет `POST /agent` в FastAPI с `query` и `thread_id`, запрашивая `text/event-stream`.
-3. FastAPI запускает LangGraph workflow и передает туда начальное состояние диалога.
-4. `coordinator_agent` анализирует запрос и решает, какой специализированный агент нужен следующим:
-   - `product_qa_agent` для товарных вопросов и отзывов,
-   - `shopping_cart_agent` для операций корзины,
-   - `warehouse_manager_agent` для проверки/резерва склада.
-5. Выбранный агент при необходимости вызывает свои tools (через tool node), получает результаты и возвращает их в граф.
-6. Управление снова возвращается координатору, который либо делегирует следующий шаг, либо завершает выполнение финальным ответом.
-7. Пока граф работает, API стримит в UI промежуточные статусные сообщения (SSE).
-8. В конце API отправляет финальное SSE-событие `final_result` с:
-   - `answer`,
-   - `used_context`,
-   - `trace_id`,
-   - `shopping_cart`.
-9. UI отображает пользователю итоговый ответ, найденные товары и текущее состояние корзины.
-10. Если пользователь оставляет оценку/комментарий, UI отправляет `POST /submit_feedback`, а backend записывает feedback в LangSmith по `trace_id`.
-
-## Структура репозитория
+## Repository Structure
 
 ```text
-apps/
-  api/               FastAPI backend + LangGraph agents
-  chatbot_ui/        Streamlit UI
-scripts/sql/         SQL схемы корзины и склада
-docs/                Диаграммы и дополнительные материалы
+backend/              FastAPI app, migrations, tests
+frontend/             React mini app
+docs/                 PRD, ERD, ADR, deploy notes
+scripts/              local/prod scripts
 docker-compose.yml
+docker-compose.prod.yml
 ```
 
-## Быстрый запуск
+## Local Run
 
-Из корня репозитория:
+### Option 1: Docker
 
 ```bash
-cp env.example .env
-docker compose up --build
+docker compose up -d postgres
 ```
 
-После старта доступны:
-
-- UI: `http://localhost:8501`
-- API docs: `http://localhost:8000/docs`
-- Qdrant: `http://localhost:6333`
-- Postgres: `localhost:5433`
-
-## Обязательная инициализация tools_database
-
-Один раз после запуска контейнеров:
-
-```powershell
-docker compose exec postgres psql -U langgraph_user -d postgres -c "CREATE DATABASE tools_database;"
-Get-Content scripts/sql/shopping_cart_table.sql | docker compose exec -T postgres psql -U langgraph_user -d tools_database
-Get-Content scripts/sql/warehouse_management.sql | docker compose exec -T postgres psql -U langgraph_user -d tools_database
+```bash
+cd backend
+python -m pip install -e .[dev]
+alembic -c alembic.ini upgrade head
+uvicorn app.main:app --reload --port 8080
 ```
+
+```bash
+cd ../frontend
+npm ci
+npm run dev
+```
+
+### Option 2: helper scripts
+
+```bash
+./scripts/start-local.sh
+```
+
+## Environment Variables
+
+Обязательные для production:
+
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `APP_ENV`
+- `OPENROUTER_API_KEY`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_WEBAPP_URL`
+- `CORS_ALLOW_ORIGIN_REGEX`
+
+Примеры: `.env.example`, `.env.prod.example`.
+
+## Production Deploy (Ubuntu)
+
+```bash
+cp .env.prod.example .env.prod
+chmod +x scripts/deploy-ubuntu.sh scripts/rollback-ubuntu.sh
+./scripts/deploy-ubuntu.sh
+```
+
+Полный runbook: `docs/server_deploy_update_instructions.xml`.
+
+## CI/CD
+
+### CI
+
+Workflow: `.github/workflows/ci.yml`
+
+- `frontend` job: lint, typecheck, build
+- `backend` job: pytest (with PostgreSQL service)
+
+### Auto Deploy
+
+Workflow: `.github/workflows/deploy.yml`  
+Скрипт: `scripts/deploy-server-update.sh`
+
+На каждый push в `main`:
+
+1. SSH на сервер
+2. `git pull --rebase --autostash`
+3. `docker-compose down --remove-orphans`
+4. `docker-compose up -d --build`
+5. health-check `/api/health/ready`
+
+Нужные GitHub Secrets:
+
+- `PROD_HOST`
+- `PROD_USER`
+- `PROD_SSH_KEY`
