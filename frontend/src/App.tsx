@@ -478,6 +478,7 @@ function ScannerView(props: {
   onFallbackToManual: () => void;
   onUseAsIs: () => Promise<void>;
   onRecalculate: (comment: string) => Promise<void>;
+  onResetForNextItem: () => void;
   onConfirmChange: (patch: Partial<ScanConfirmForm>) => void;
   onConfirm: () => Promise<void>;
 }) {
@@ -490,6 +491,9 @@ function ScannerView(props: {
   const [cameraBusy, setCameraBusy] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const swipeStartYRef = useRef<number | null>(null);
+  const swipeStartXRef = useRef<number | null>(null);
+  const [swipeHint, setSwipeHint] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -586,9 +590,36 @@ function ScannerView(props: {
     await props.onConfirm();
   }
 
+  function onScannerTouchStart(e: TouchEvent<HTMLElement>) {
+    swipeStartYRef.current = e.touches[0]?.clientY ?? null;
+    swipeStartXRef.current = e.touches[0]?.clientX ?? null;
+  }
+
+  function onScannerTouchEnd(e: TouchEvent<HTMLElement>) {
+    if (swipeStartYRef.current === null || swipeStartXRef.current === null) return;
+    const endY = e.changedTouches[0]?.clientY ?? swipeStartYRef.current;
+    const endX = e.changedTouches[0]?.clientX ?? swipeStartXRef.current;
+    const deltaY = endY - swipeStartYRef.current;
+    const deltaX = endX - swipeStartXRef.current;
+    swipeStartYRef.current = null;
+    swipeStartXRef.current = null;
+
+    const isSwipeUp = deltaY < -90 && Math.abs(deltaX) < 70;
+    if (!isSwipeUp) return;
+    props.onResetForNextItem();
+    setSwipeHint("Scanner reset for next item");
+    window.setTimeout(() => setSwipeHint(null), 1600);
+  }
+
   return (
-    <section className="space-y-4 rounded-3xl bg-white p-5 shadow-sm">
+    <section
+      className="space-y-4 rounded-3xl bg-white p-5 shadow-sm"
+      onTouchEnd={onScannerTouchEnd}
+      onTouchStart={onScannerTouchStart}
+    >
       <h2 className="text-lg font-semibold text-ink">AI Scanner</h2>
+      <p className="text-[11px] uppercase tracking-wide text-slate-400">Swipe up to reset for next item</p>
+      {swipeHint && <p className="text-xs text-emerald-600">{swipeHint}</p>}
       <label className="block text-sm text-slate-600">
         Text description (optional, can scan without photo)
         <textarea
@@ -1276,6 +1307,29 @@ export function App() {
     }
   }
 
+  function resetScannerForNextItem() {
+    const nextDateTime = currentDatetimeLocal();
+    const nextMealType = detectMealTypeFromLocalDatetime(nextDateTime);
+    if (scanPreview) URL.revokeObjectURL(scanPreview);
+    setScanFile(null);
+    setScanDescription("");
+    setScanPreview(null);
+    setScanStatus(null);
+    setScanProgress(0);
+    setScanElapsedSeconds(0);
+    setActiveScanId(null);
+    setScanConfirmForm({
+      title: "",
+      mealType: nextMealType,
+      eatenAt: nextDateTime,
+      itemName: "",
+      calories: "",
+      proteinG: "",
+      carbsG: "",
+      fatG: ""
+    });
+  }
+
   function fallbackToManualMeal() {
     setMealForm({
       title: scanConfirmForm.title || scanConfirmForm.itemName,
@@ -1352,6 +1406,7 @@ export function App() {
               onFallbackToManual={fallbackToManualMeal}
               onUseAsIs={useScanAsIs}
               onRecalculate={recalculateScan}
+              onResetForNextItem={resetScannerForNextItem}
               onConfirmChange={(patch) => setScanConfirmForm((prev) => ({ ...prev, ...patch }))}
               onConfirm={confirmScan}
             />
