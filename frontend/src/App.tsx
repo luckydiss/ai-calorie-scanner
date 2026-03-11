@@ -154,6 +154,9 @@ function SwipeMealRow(props: {
   const actionWidth = 96;
   const revealThreshold = 64;
   const mealCalories = props.meal.items.reduce((acc, item) => acc + item.calories, 0);
+  const mealProtein = props.meal.items.reduce((acc, item) => acc + item.proteinG, 0);
+  const mealFat = props.meal.items.reduce((acc, item) => acc + item.fatG, 0);
+  const mealCarbs = props.meal.items.reduce((acc, item) => acc + item.carbsG, 0);
 
   function onTouchStart(e: TouchEvent<HTMLElement>) {
     swipeStartXRef.current = e.touches[0]?.clientX ?? null;
@@ -211,6 +214,9 @@ function SwipeMealRow(props: {
         </div>
         <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">
           {props.meal.mealType} - {formatTime(props.meal.eatenAt)}
+        </p>
+        <p className="mt-1 text-xs text-slate-600">
+          Б/Ж/У: {mealProtein.toFixed(1)} / {mealFat.toFixed(1)} / {mealCarbs.toFixed(1)} г
         </p>
       </article>
     </div>
