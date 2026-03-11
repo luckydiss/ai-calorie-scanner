@@ -2,7 +2,6 @@
 
 AI-powered calorie assistant для Telegram Mini App: пользователь логирует еду текстом/фото, backend на FastAPI обрабатывает сканы через OpenRouter, а React WebApp показывает Dashboard и Daily Log.
 
-[![Live Demo](https://img.shields.io/badge/%F0%9F%9A%80%20Live%20Demo-Open%20Mini%20App-brightgreen?style=for-the-badge)](https://ai-calorie.duckdns.org)
 
 ---
 
