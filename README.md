@@ -65,3 +65,17 @@ docker-compose -f docker-compose.prod.yml logs -f bot
 Troubleshooting uploads:
 
 - If scan image upload fails with `413 Payload Too Large`, increase `client_max_body_size` in every Nginx layer (host proxy and frontend container). The frontend container config already sets `client_max_body_size 25M`.
+
+## GitHub auto-deploy (push to main)
+
+Workflow file: `.github/workflows/deploy.yml`.
+
+Set these repository secrets in GitHub:
+
+- `PROD_HOST` (example: `13.63.45.211`)
+- `PROD_USER` (example: `ubuntu`)
+- `PROD_SSH_KEY` (private key contents used for SSH auth)
+
+On every push to `main`, GitHub Actions connects to the server and runs:
+
+- `scripts/deploy-server-update.sh`
