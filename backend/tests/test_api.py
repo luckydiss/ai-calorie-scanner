@@ -226,6 +226,55 @@ def test_health_endpoints() -> None:
         assert ready.json()["status"] == "ready"
 
 
+def test_achievements_include_hidden_and_level_tracks() -> None:
+    with make_client() as client:
+        headers = auth_headers(client)
+
+        breakfast_day_1 = {
+            "title": "Apple Breakfast",
+            "mealType": "breakfast",
+            "eatenAt": datetime(2026, 3, 10, 8, 15).isoformat() + "Z",
+            "items": [
+                {"name": "Apple", "calories": 95, "proteinG": 0, "carbsG": 25, "fatG": 0},
+            ],
+        }
+        breakfast_day_2 = {
+            "title": "Berry Yogurt",
+            "mealType": "breakfast",
+            "eatenAt": datetime(2026, 3, 11, 8, 45).isoformat() + "Z",
+            "items": [
+                {"name": "Berries", "calories": 80, "proteinG": 1, "carbsG": 18, "fatG": 0},
+            ],
+        }
+        late_burger = {
+            "title": "Late Burger",
+            "mealType": "dinner",
+            "eatenAt": datetime(2026, 3, 11, 22, 30).isoformat() + "Z",
+            "items": [
+                {"name": "Burger", "calories": 540, "proteinG": 25, "carbsG": 40, "fatG": 30},
+            ],
+        }
+
+        assert client.post("/meals", json=breakfast_day_1, headers=headers).status_code == 201
+        assert client.post("/meals", json=breakfast_day_2, headers=headers).status_code == 201
+        assert client.post("/meals", json=late_burger, headers=headers).status_code == 201
+
+        achievements = client.get("/achievements", headers=headers)
+        assert achievements.status_code == 200
+        payload = achievements.json()
+        by_key = {item["key"]: item for item in payload["items"]}
+
+        assert by_key["first_bite"]["unlocked"] is True
+        assert by_key["manual_control"]["unlocked"] is True
+        assert by_key["green_light"]["unlocked"] is True
+        assert by_key["sweet_truth"]["unlocked"] is True
+        assert by_key["night_owl"]["unlocked"] is True
+        assert by_key["morning_magic_bronze"]["unlocked"] is True
+        assert by_key["morning_magic_silver"]["unlocked"] is True
+        assert by_key["calorie_sniper"]["unlocked"] is False
+        assert by_key["calorie_sniper"]["title"] == "Hidden achievement"
+
+
 def test_logout_revokes_access_and_refresh() -> None:
     with make_client() as client:
         tokens = auth_tokens(client)

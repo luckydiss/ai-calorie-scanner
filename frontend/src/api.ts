@@ -55,6 +55,9 @@ export type Achievement = {
   target: number;
   unlocked: boolean;
   unlockedAt: string | null;
+  hidden: boolean;
+  group: string | null;
+  tier: "bronze" | "silver" | "gold" | null;
 };
 
 export type AchievementsResponse = {

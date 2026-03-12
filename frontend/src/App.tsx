@@ -1,6 +1,7 @@
 import { FormEvent, TouchEvent, useEffect, useRef, useState } from "react";
 import {
   api,
+  type Achievement,
   type AchievementsResponse,
   bootstrapSession,
   todayIso,
@@ -48,6 +49,17 @@ type ScanConfirmForm = {
   fatG: string;
 };
 
+type AchievementTrack = {
+  id: string;
+  title: string;
+  description: string;
+  hidden: boolean;
+  totalLevels: number;
+  unlockedLevels: number;
+  currentLevel: Achievement | null;
+  nextLevel: Achievement | null;
+};
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
@@ -87,6 +99,41 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function tierLabel(tier: Achievement["tier"]): string {
+  if (tier === "bronze") return "Bronze";
+  if (tier === "silver") return "Silver";
+  if (tier === "gold") return "Gold";
+  return "";
+}
+
+function buildAchievementTracks(items: Achievement[]): AchievementTrack[] {
+  const groups = new Map<string, Achievement[]>();
+  for (const item of items) {
+    const groupKey = item.group ?? item.key;
+    const current = groups.get(groupKey) ?? [];
+    current.push(item);
+    groups.set(groupKey, current);
+  }
+  const tierOrder: Record<string, number> = { bronze: 1, silver: 2, gold: 3 };
+  return Array.from(groups.entries()).map(([groupKey, groupItems]) => {
+    const levels = [...groupItems].sort((a, b) => (tierOrder[a.tier ?? ""] ?? 0) - (tierOrder[b.tier ?? ""] ?? 0));
+    const unlockedLevels = levels.filter((item) => item.unlocked).length;
+    const currentLevel = [...levels].reverse().find((item) => item.unlocked) ?? null;
+    const nextLevel = levels.find((item) => !item.unlocked) ?? null;
+    const representative = currentLevel ?? levels[0];
+    return {
+      id: groupKey,
+      title: representative.title,
+      description: representative.description,
+      hidden: representative.hidden && !currentLevel,
+      totalLevels: levels.length,
+      unlockedLevels,
+      currentLevel,
+      nextLevel,
+    };
+  });
+}
+
 function MacroBar(props: { label: string; value: number; goal: number; color: string }) {
   const percent = props.goal > 0 ? Math.min(100, Math.round((props.value / props.goal) * 100)) : 0;
   return (
@@ -110,7 +157,12 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
       ? Math.min(100, Math.round((dashboard.totals.calories / dashboard.goals.calories) * 100))
       : 0;
   const unlockedCount = achievements ? achievements.items.filter((item) => item.unlocked).length : 0;
-  const nextLocked = achievements?.items.find((item) => !item.unlocked) ?? null;
+  const tracks = achievements ? buildAchievementTracks(achievements.items) : [];
+  const nextLocked = tracks.find((track) => track.nextLevel) ?? null;
+  const latestUnlocked =
+    achievements?.items
+      .filter((item) => item.unlocked && item.unlockedAt)
+      .sort((a, b) => new Date(b.unlockedAt ?? 0).getTime() - new Date(a.unlockedAt ?? 0).getTime())[0] ?? null;
 
   return (
     <section className="space-y-4">
@@ -143,43 +195,100 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
         />
       </div>
       {achievements && (
-        <div className="rounded-3xl bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-ink">Achievements</h2>
+        <div className="achievement-board rounded-3xl p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-ink">Achievement Board</h2>
+              <p className="text-sm text-slate-600">
+                Streak: {achievements.streak.currentDays} days (best {achievements.streak.longestDays})
+              </p>
+            </div>
             <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
               {unlockedCount}/{achievements.items.length}
             </span>
           </div>
-          <p className="mt-2 text-sm text-slate-600">
-            Streak: {achievements.streak.currentDays} days (best {achievements.streak.longestDays})
-          </p>
+          {latestUnlocked && (
+            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Latest unlock</p>
+              <p className="mt-1 text-sm font-semibold text-ink">{latestUnlocked.title}</p>
+              <p className="text-xs text-slate-600">{latestUnlocked.description}</p>
+            </div>
+          )}
           {nextLocked && (
-            <div className="mt-3 rounded-xl border border-slate-200 p-3">
-              <p className="text-sm font-semibold text-ink">{nextLocked.title}</p>
-              <p className="text-xs text-slate-500">{nextLocked.description}</p>
+            <div className="mt-4 rounded-2xl border border-sky-200 bg-white/80 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">Next reward</p>
+              <p className="mt-1 text-sm font-semibold text-ink">
+                {nextLocked.hidden ? "Hidden achievement" : nextLocked.title}
+              </p>
+              <p className="text-xs text-slate-500">
+                {nextLocked.hidden
+                  ? "Keep logging in different ways to reveal this secret."
+                  : nextLocked.nextLevel?.description ?? nextLocked.description}
+              </p>
               <div className="mt-2 h-2 rounded bg-slate-100">
                 <div
                   className="h-2 rounded bg-primary"
-                  style={{ width: `${Math.min(100, Math.round((nextLocked.progress / nextLocked.target) * 100))}%` }}
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.round(
+                        (((nextLocked.nextLevel?.progress ?? 0) || 0) / ((nextLocked.nextLevel?.target ?? 1) || 1)) * 100
+                      )
+                    )}%`
+                  }}
                 />
               </div>
               <p className="mt-1 text-xs text-slate-600">
-                {nextLocked.progress}/{nextLocked.target}
+                {nextLocked.nextLevel?.progress ?? 0}/{nextLocked.nextLevel?.target ?? 1}
               </p>
             </div>
           )}
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {achievements.items.slice(0, 6).map((item) => (
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {tracks.map((track) => (
               <div
-                className={`rounded-xl border p-2 ${
-                  item.unlocked ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"
+                className={`rounded-2xl border p-3 ${
+                  track.currentLevel ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white/85"
                 }`}
-                key={item.key}
+                key={track.id}
               >
-                <p className="text-xs font-semibold text-ink">{item.title}</p>
-                <p className="text-[11px] text-slate-600">
-                  {item.progress}/{item.target}
-                </p>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold text-ink">{track.hidden ? "?" : track.title}</p>
+                    <p className="text-[11px] text-slate-600">
+                      {track.hidden
+                        ? "Secret reward"
+                        : track.nextLevel?.description ?? track.currentLevel?.description ?? track.description}
+                    </p>
+                  </div>
+                  {track.totalLevels > 1 && (
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">
+                      {track.currentLevel?.tier ? tierLabel(track.currentLevel.tier) : "Track"}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 h-2 rounded bg-slate-100">
+                  <div
+                    className={`h-2 rounded ${track.currentLevel ? "bg-emerald-500" : "bg-primary"}`}
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.round(
+                          (((track.nextLevel?.progress ?? track.currentLevel?.target ?? 0) || 0) /
+                            ((track.nextLevel?.target ?? track.currentLevel?.target ?? 1) || 1)) *
+                            100
+                        )
+                      )}%`
+                    }}
+                  />
+                </div>
+                <div className="mt-2 flex items-center justify-between text-[11px] text-slate-600">
+                  <span>
+                    {track.nextLevel
+                      ? `${track.nextLevel.progress}/${track.nextLevel.target}`
+                      : `${track.unlockedLevels}/${track.totalLevels} complete`}
+                  </span>
+                  {track.totalLevels > 1 && <span>{track.unlockedLevels}/{track.totalLevels} tiers</span>}
+                </div>
               </div>
             ))}
           </div>

@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal, Mapping
 from urllib.parse import parse_qsl
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile, status
@@ -164,12 +165,45 @@ class AchievementOut(BaseModel):
     target: int = Field(ge=1)
     unlocked: bool
     unlockedAt: datetime | None = None
+    hidden: bool = False
+    group: str | None = None
+    tier: Literal["bronze", "silver", "gold"] | None = None
 
 
 class AchievementsResponse(BaseModel):
     streak: StreakOut
     items: list[AchievementOut]
 
+
+HONESTY_KEYWORDS = {
+    "burger",
+    "pizza",
+    "fries",
+    "shawarma",
+    "chocolate",
+    "cake",
+    "ice cream",
+    "beer",
+    "wine",
+    "cola",
+    "soda",
+}
+
+GREEN_LIGHT_KEYWORDS = {
+    "apple",
+    "banana",
+    "orange",
+    "berry",
+    "berries",
+    "salad",
+    "broccoli",
+    "tomato",
+    "cucumber",
+    "carrot",
+    "avocado",
+    "fruit",
+    "vegetable",
+}
 
 ACHIEVEMENT_DEFINITIONS: list[dict[str, Any]] = [
     {
@@ -180,67 +214,131 @@ ACHIEVEMENT_DEFINITIONS: list[dict[str, Any]] = [
         "target": 1,
     },
     {
-        "key": "meal_starter_5",
-        "title": "Meal Starter",
-        "description": "Log 5 meals total",
-        "metric": "total_meals",
-        "target": 5,
-    },
-    {
-        "key": "meal_habit_10",
-        "title": "Meal Habit",
-        "description": "Log 10 meals total",
-        "metric": "total_meals",
-        "target": 10,
-    },
-    {
-        "key": "power_day_3",
-        "title": "Power Day",
-        "description": "Log 3 meals in one day",
-        "metric": "max_meals_day",
-        "target": 3,
-    },
-    {
-        "key": "ai_explorer_3",
-        "title": "AI Explorer",
-        "description": "Confirm 3 AI-based meals",
+        "key": "scanner_in_play",
+        "title": "Scanner in Play",
+        "description": "Confirm one AI meal",
         "metric": "ai_meals",
-        "target": 3,
+        "target": 1,
     },
     {
-        "key": "protein_keeper_3",
-        "title": "Protein Keeper",
-        "description": "Hit protein goal on 3 different days",
-        "metric": "protein_goal_days",
-        "target": 3,
+        "key": "manual_control",
+        "title": "Manual Control",
+        "description": "Add one meal manually",
+        "metric": "manual_meals",
+        "target": 1,
     },
     {
-        "key": "calorie_rhythm_5",
-        "title": "Calorie Rhythm",
-        "description": "Stay within 10% of calorie goal for 5 days",
-        "metric": "calorie_range_days",
+        "key": "precise_edit",
+        "title": "Precise Edit",
+        "description": "Recalculate one AI result before confirming",
+        "metric": "scan_recalculations",
+        "target": 1,
+    },
+    {
+        "key": "sweet_truth",
+        "title": "Sweet Truth",
+        "description": "Log something indulgent without hiding it",
+        "metric": "honesty_logs",
+        "target": 1,
+        "hidden": True,
+    },
+    {
+        "key": "night_owl",
+        "title": "Night Owl",
+        "description": "Log a meal after 22:00",
+        "metric": "late_night_logs",
+        "target": 1,
+        "hidden": True,
+    },
+    {
+        "key": "green_light",
+        "title": "Green Light",
+        "description": "Log a fruit or vegetable",
+        "metric": "green_logs",
+        "target": 1,
+    },
+    {
+        "key": "gourmet",
+        "title": "Gourmet",
+        "description": "Log 5 different foods in one day",
+        "metric": "max_unique_items_day",
         "target": 5,
     },
     {
-        "key": "streak_3",
-        "title": "3-Day Streak",
-        "description": "Log meals 3 days in a row",
-        "metric": "current_streak_days",
-        "target": 3,
+        "key": "morning_magic_bronze",
+        "title": "Morning Magic",
+        "description": "Log breakfast before 10:00",
+        "metric": "breakfast_streak_days",
+        "target": 1,
+        "group": "morning_magic",
+        "tier": "bronze",
     },
     {
-        "key": "streak_7",
-        "title": "7-Day Streak",
+        "key": "morning_magic_silver",
+        "title": "Morning Magic",
+        "description": "Log breakfast before 10:00 on 2 days in a row",
+        "metric": "breakfast_streak_days",
+        "target": 2,
+        "group": "morning_magic",
+        "tier": "silver",
+    },
+    {
+        "key": "morning_magic_gold",
+        "title": "Morning Magic",
+        "description": "Log breakfast before 10:00 on 3 days in a row",
+        "metric": "breakfast_streak_days",
+        "target": 3,
+        "group": "morning_magic",
+        "tier": "gold",
+    },
+    {
+        "key": "warm_streak_bronze",
+        "title": "Warm Streak",
+        "description": "Log meals 2 days in a row",
+        "metric": "current_streak_days",
+        "target": 2,
+        "group": "warm_streak",
+        "tier": "bronze",
+    },
+    {
+        "key": "warm_streak_silver",
+        "title": "Warm Streak",
+        "description": "Log meals 4 days in a row",
+        "metric": "current_streak_days",
+        "target": 4,
+        "group": "warm_streak",
+        "tier": "silver",
+    },
+    {
+        "key": "warm_streak_gold",
+        "title": "Warm Streak",
         "description": "Log meals 7 days in a row",
         "metric": "current_streak_days",
         "target": 7,
+        "group": "warm_streak",
+        "tier": "gold",
     },
     {
-        "key": "streak_14",
-        "title": "14-Day Streak",
-        "description": "Log meals 14 days in a row",
-        "metric": "current_streak_days",
-        "target": 14,
+        "key": "calorie_sniper",
+        "title": "Calorie Sniper",
+        "description": "Finish a day within 20 kcal of your goal",
+        "metric": "calorie_sniper_days",
+        "target": 1,
+        "hidden": True,
+    },
+    {
+        "key": "back_in_game",
+        "title": "Back in the Game",
+        "description": "Return after skipping at least one day",
+        "metric": "comeback_days",
+        "target": 1,
+    },
+    {
+        "key": "weekend_hero",
+        "title": "Weekend Hero",
+        "description": "Log 2 meals on both Saturday and Sunday",
+        "metric": "weekend_double_days",
+        "target": 1,
     },
 ]
 
@@ -391,7 +489,15 @@ def ensure_achievement_catalog(conn: DBConnection) -> None:
                 definition["key"],
                 definition["title"],
                 definition["description"],
-                json.dumps({"metric": definition["metric"], "target": definition["target"]}),
+                json.dumps(
+                    {
+                        "metric": definition["metric"],
+                        "target": definition["target"],
+                        "hidden": bool(definition.get("hidden", False)),
+                        "group": definition.get("group"),
+                        "tier": definition.get("tier"),
+                    }
+                ),
                 dt_to_str(now_utc()),
             ),
         )
@@ -418,27 +524,132 @@ def compute_streak(days_desc: list[date]) -> tuple[int, int]:
     return current, longest
 
 
-def build_achievement_state(conn: DBConnection, user_id: str) -> tuple[dict[str, int], StreakOut]:
-    total_meals_row = conn.execute(
-        "SELECT COUNT(*)::int AS cnt FROM meals WHERE user_id = ?",
-        (user_id,),
-    ).fetchone()
-    ai_meals_row = conn.execute(
-        "SELECT COUNT(*)::int AS cnt FROM meals WHERE user_id = ? AND source = 'ai'",
-        (user_id,),
-    ).fetchone()
-    per_day_rows = conn.execute(
+def normalize_text(value: str) -> str:
+    return " ".join(value.lower().strip().split())
+
+
+def has_any_keyword(texts: list[str], keywords: set[str]) -> bool:
+    normalized = " ".join(normalize_text(text) for text in texts if text)
+    return any(keyword in normalized for keyword in keywords)
+
+
+def get_user_timezone(conn: DBConnection, user_id: str) -> ZoneInfo:
+    profile_row = conn.execute("SELECT timezone FROM profiles WHERE user_id = ?", (user_id,)).fetchone()
+    timezone_name = profile_row["timezone"] if profile_row and profile_row["timezone"] else "UTC"
+    try:
+        return ZoneInfo(str(timezone_name))
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("UTC")
+
+
+def get_goal_for_day(conn: DBConnection, user_id: str, day: date) -> tuple[float | None, float | None]:
+    goal_row = conn.execute(
         """
-        SELECT DATE(eaten_at) AS day, COUNT(*)::int AS meal_count
-        FROM meals
-        WHERE user_id = ?
-        GROUP BY DATE(eaten_at)
-        ORDER BY day DESC
+        SELECT calories, protein_g
+        FROM daily_goals
+        WHERE user_id = ? AND effective_from <= ?
+        ORDER BY effective_from DESC
+        LIMIT 1
+        """,
+        (user_id, day.isoformat()),
+    ).fetchone()
+    if not goal_row:
+        return None, None
+    return float(goal_row["calories"]), float(goal_row["protein_g"])
+
+
+def build_achievement_state(conn: DBConnection, user_id: str) -> tuple[dict[str, int], StreakOut]:
+    user_tz = get_user_timezone(conn, user_id)
+    meal_rows = conn.execute(
+        """
+        SELECT
+          m.id AS meal_id,
+          m.title,
+          m.meal_type,
+          m.eaten_at,
+          m.source,
+          mi.name AS item_name,
+          mi.calories,
+          mi.protein_g,
+          mi.carbs_g,
+          mi.fat_g
+        FROM meals m
+        JOIN meal_items mi ON mi.meal_id = m.id
+        WHERE m.user_id = ?
+        ORDER BY m.eaten_at DESC
         """,
         (user_id,),
     ).fetchall()
-    max_meals_day = max([int(row["meal_count"]) for row in per_day_rows], default=0)
-    meal_days = [date.fromisoformat(str(row["day"])) for row in per_day_rows]
+    recalc_row = conn.execute(
+        "SELECT COUNT(*)::int AS cnt FROM events WHERE user_id = ? AND event_name = 'scan_recalculated'",
+        (user_id,),
+    ).fetchone()
+
+    meals_by_id: dict[str, dict[str, Any]] = {}
+    for row in meal_rows:
+        meal_id = str(row["meal_id"])
+        meal = meals_by_id.setdefault(
+            meal_id,
+            {
+                "title": row["title"],
+                "meal_type": row["meal_type"],
+                "eaten_at": str_to_dt(row["eaten_at"]).astimezone(user_tz),
+                "source": row["source"],
+                "items": [],
+            },
+        )
+        meal["items"].append(
+            {
+                "name": row["item_name"],
+                "calories": float(row["calories"]),
+                "protein_g": float(row["protein_g"]),
+                "carbs_g": float(row["carbs_g"]),
+                "fat_g": float(row["fat_g"]),
+            }
+        )
+
+    daily: dict[date, dict[str, Any]] = {}
+    total_meals = len(meals_by_id)
+    ai_meals = 0
+    manual_meals = 0
+    honesty_logs = 0
+    late_night_logs = 0
+    green_logs = 0
+
+    for meal in meals_by_id.values():
+        local_dt = meal["eaten_at"]
+        local_day = local_dt.date()
+        item_names = [str(item["name"]) for item in meal["items"]]
+        texts = [str(meal["title"]), *item_names]
+        day_state = daily.setdefault(
+            local_day,
+            {
+                "meal_count": 0,
+                "unique_items": set(),
+                "calories": 0.0,
+                "protein_g": 0.0,
+                "breakfast_before_10": False,
+            },
+        )
+        day_state["meal_count"] += 1
+        day_state["unique_items"].update(normalize_text(name) for name in item_names if name)
+        day_state["calories"] += sum(float(item["calories"]) for item in meal["items"])
+        day_state["protein_g"] += sum(float(item["protein_g"]) for item in meal["items"])
+
+        if meal["source"] == "ai":
+            ai_meals += 1
+        if meal["source"] == "manual":
+            manual_meals += 1
+        if has_any_keyword(texts, HONESTY_KEYWORDS):
+            honesty_logs += 1
+        if has_any_keyword(texts, GREEN_LIGHT_KEYWORDS):
+            green_logs += 1
+        if local_dt.hour >= 22:
+            late_night_logs += 1
+        if meal["meal_type"] == "breakfast" and local_dt.hour < 10:
+            day_state["breakfast_before_10"] = True
+
+    meal_days = sorted(daily.keys(), reverse=True)
     current_streak_days, longest_streak_days = compute_streak(meal_days)
     last_logged_day = meal_days[0] if meal_days else None
 
@@ -462,76 +673,54 @@ def build_achievement_state(conn: DBConnection, user_id: str) -> tuple[dict[str,
             ),
         )
 
-    daily_rows = conn.execute(
-        """
-        WITH daily AS (
-          SELECT
-            DATE(m.eaten_at) AS day,
-            COALESCE(SUM(mi.calories), 0) AS calories,
-            COALESCE(SUM(mi.protein_g), 0) AS protein_g
-          FROM meals m
-          JOIN meal_items mi ON mi.meal_id = m.id
-          WHERE m.user_id = ?
-          GROUP BY DATE(m.eaten_at)
-        )
-        SELECT
-          d.day,
-          d.calories,
-          d.protein_g,
-          (
-            SELECT dg.calories
-            FROM daily_goals dg
-            WHERE dg.user_id = ? AND dg.effective_from <= d.day
-            ORDER BY dg.effective_from DESC
-            LIMIT 1
-          ) AS goal_calories,
-          (
-            SELECT dg.protein_g
-            FROM daily_goals dg
-            WHERE dg.user_id = ? AND dg.effective_from <= d.day
-            ORDER BY dg.effective_from DESC
-            LIMIT 1
-          ) AS goal_protein
-        FROM daily d
-        ORDER BY d.day DESC
-        """,
-        (user_id, user_id, user_id),
-    ).fetchall()
-    protein_goal_days = 0
-    calorie_range_days = 0
-    for row in daily_rows:
-        goal_protein = row["goal_protein"]
-        goal_calories = row["goal_calories"]
-        protein = float(row["protein_g"])
-        calories = float(row["calories"])
-        if goal_protein is not None and protein >= float(goal_protein):
-            protein_goal_days += 1
-        if goal_calories is not None:
-            target = float(goal_calories)
-            if target > 0 and (target * 0.9) <= calories <= (target * 1.1):
-                calorie_range_days += 1
+    breakfast_days = [day for day in meal_days if daily[day]["breakfast_before_10"]]
+    breakfast_streak_days, _ = compute_streak(breakfast_days)
+
+    max_unique_items_day = max((len(day_state["unique_items"]) for day_state in daily.values()), default=0)
+    comeback_days = 0
+    weekend_double_days = 0
+    calorie_sniper_days = 0
+
+    sorted_asc = sorted(meal_days)
+    for idx in range(1, len(sorted_asc)):
+        if (sorted_asc[idx] - sorted_asc[idx - 1]).days > 1:
+            comeback_days += 1
+
+    for day, day_state in daily.items():
+        if day.weekday() == 5 and day_state["meal_count"] >= 2:
+            sunday_state = daily.get(day + timedelta(days=1))
+            if sunday_state and sunday_state["meal_count"] >= 2:
+                weekend_double_days += 1
+        goal_calories, _goal_protein = get_goal_for_day(conn, user_id, day)
+        if goal_calories is not None and abs(day_state["calories"] - goal_calories) <= 20:
+            calorie_sniper_days += 1
 
     metrics = {
-        "total_meals": int(total_meals_row["cnt"] if total_meals_row else 0),
-        "ai_meals": int(ai_meals_row["cnt"] if ai_meals_row else 0),
-        "max_meals_day": int(max_meals_day),
-        "current_streak_days": int(current_streak_days),
-        "protein_goal_days": int(protein_goal_days),
-        "calorie_range_days": int(calorie_range_days),
+        "total_meals": total_meals,
+        "ai_meals": ai_meals,
+        "manual_meals": manual_meals,
+        "scan_recalculations": int(recalc_row["cnt"] if recalc_row else 0),
+        "honesty_logs": honesty_logs,
+        "late_night_logs": late_night_logs,
+        "green_logs": green_logs,
+        "max_unique_items_day": max_unique_items_day,
+        "breakfast_streak_days": breakfast_streak_days,
+        "current_streak_days": current_streak_days,
+        "calorie_sniper_days": calorie_sniper_days,
+        "comeback_days": comeback_days,
+        "weekend_double_days": weekend_double_days,
     }
     return metrics, StreakOut(
         currentDays=current_streak_days,
         longestDays=longest_streak_days,
         lastLoggedDay=last_logged_day,
     )
-
-
 def evaluate_and_unlock_achievements(conn: DBConnection, user_id: str) -> AchievementsResponse:
     ensure_achievement_catalog(conn)
     metrics, streak = build_achievement_state(conn, user_id)
 
     catalog_rows = conn.execute(
-        "SELECT id, key, title, description FROM achievements",
+        "SELECT id, key, title, description, rule_json FROM achievements",
     ).fetchall()
     by_key = {row["key"]: row for row in catalog_rows}
 
@@ -567,15 +756,25 @@ def evaluate_and_unlock_achievements(conn: DBConnection, user_id: str) -> Achiev
         progress = int(metrics.get(definition["metric"], 0))
         target = int(definition["target"])
         row = by_key.get(key)
+        hidden = bool(definition.get("hidden", False))
+        unlocked = key in unlocked_by_key
+        title = row["title"] if row else definition["title"]
+        description = row["description"] if row else definition["description"]
+        if hidden and not unlocked:
+            title = "Hidden achievement"
+            description = "Log in unusual ways to discover this one."
         items.append(
             AchievementOut(
                 key=key,
-                title=row["title"] if row else definition["title"],
-                description=row["description"] if row else definition["description"],
+                title=title,
+                description=description,
                 progress=min(progress, target),
                 target=target,
-                unlocked=key in unlocked_by_key,
+                unlocked=unlocked,
                 unlockedAt=unlocked_by_key.get(key),
+                hidden=hidden,
+                group=definition.get("group"),
+                tier=definition.get("tier"),
             )
         )
     return AchievementsResponse(streak=streak, items=items)
@@ -1490,6 +1689,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 conn.execute(
                     "UPDATE scan_jobs SET updated_at = ? WHERE id = ?",
                     (dt_to_str(now_utc()), scan_id),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO events(id, user_id, event_name, payload_json, created_at)
+                    VALUES (?, ?, 'scan_recalculated', ?, ?)
+                    """,
+                    (
+                        str(uuid.uuid4()),
+                        user["id"],
+                        json.dumps({"scanId": scan_id}),
+                        dt_to_str(now_utc()),
+                    ),
                 )
             metrics.inc("scan_recalculate_total", {"outcome": "succeeded"})
         except Exception as exc:

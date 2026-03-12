@@ -92,3 +92,11 @@ body {
     0 14px 28px rgba(15, 23, 42, 0.09),
     inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
+
+.achievement-board {
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  background:
+    radial-gradient(circle at top right, rgba(250, 204, 21, 0.18), rgba(255, 255, 255, 0) 34%),
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), rgba(255, 255, 255, 0) 30%),
+    linear-gradient(180deg, #ffffff, #f8fbff);
+}
