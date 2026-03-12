@@ -279,6 +279,87 @@ def test_achievements_include_hidden_and_level_tracks() -> None:
         assert by_key["calorie_sniper"]["title"] == "Hidden achievement"
 
 
+def test_achievements_include_new_daily_challenges() -> None:
+    with make_client() as client:
+        headers = auth_headers(client)
+
+        goal_set = client.put(
+            "/goals",
+            json={"calories": 1000, "proteinG": 100, "carbsG": 100, "fatG": 40},
+            headers=headers,
+        )
+        assert goal_set.status_code == 200
+
+        meals = [
+            {
+                "title": "Cappuccino",
+                "mealType": "breakfast",
+                "eatenAt": datetime(2026, 3, 12, 9, 0).isoformat() + "Z",
+                "items": [
+                    {"name": "Milk", "calories": 30, "proteinG": 2, "carbsG": 4, "fatG": 1},
+                ],
+            },
+            {
+                "title": "Chicken Rice",
+                "mealType": "lunch",
+                "eatenAt": datetime(2026, 3, 12, 13, 0).isoformat() + "Z",
+                "items": [
+                    {"name": "Chicken Rice", "calories": 470, "proteinG": 35, "carbsG": 40, "fatG": 12},
+                ],
+            },
+            {
+                "title": "Protein Yogurt",
+                "mealType": "snack",
+                "eatenAt": datetime(2026, 3, 12, 16, 30).isoformat() + "Z",
+                "items": [
+                    {"name": "Protein Yogurt", "calories": 200, "proteinG": 20, "carbsG": 15, "fatG": 5},
+                ],
+            },
+            {
+                "title": "Salmon Bowl",
+                "mealType": "dinner",
+                "eatenAt": datetime(2026, 3, 12, 20, 0).isoformat() + "Z",
+                "items": [
+                    {"name": "Salmon Bowl", "calories": 300, "proteinG": 20, "carbsG": 20, "fatG": 13},
+                ],
+            },
+            {
+                "title": "Big Pasta Plate",
+                "mealType": "lunch",
+                "eatenAt": datetime(2026, 3, 13, 12, 0).isoformat() + "Z",
+                "items": [
+                    {"name": "Pasta", "calories": 900, "proteinG": 80, "carbsG": 80, "fatG": 30},
+                ],
+            },
+            {
+                "title": "Saturday Bowl",
+                "mealType": "lunch",
+                "eatenAt": datetime(2026, 3, 14, 12, 0).isoformat() + "Z",
+                "items": [
+                    {"name": "Rice Bowl", "calories": 1000, "proteinG": 78, "carbsG": 90, "fatG": 32},
+                ],
+            },
+        ]
+
+        for meal in meals:
+            resp = client.post("/meals", json=meal, headers=headers)
+            assert resp.status_code == 201
+
+        achievements = client.get("/achievements", headers=headers)
+        assert achievements.status_code == 200
+        payload = achievements.json()
+        by_key = {item["key"]: item for item in payload["items"]}
+
+        assert by_key["snack_master"]["unlocked"] is True
+        assert by_key["holy_trinity"]["unlocked"] is True
+        assert by_key["meal_intervals"]["unlocked"] is True
+        assert by_key["thursday_checkpoint"]["unlocked"] is True
+        assert by_key["hat_trick"]["unlocked"] is True
+        assert by_key["coffee_ninja"]["unlocked"] is True
+        assert by_key["micro_control"]["unlocked"] is True
+        assert by_key["big_feast"]["unlocked"] is True
+
+
 def test_logout_revokes_access_and_refresh() -> None:
     with make_client() as client:
         tokens = auth_tokens(client)

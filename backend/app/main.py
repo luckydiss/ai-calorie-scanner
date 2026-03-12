@@ -205,6 +205,22 @@ GREEN_LIGHT_KEYWORDS = {
     "vegetable",
 }
 
+COFFEE_KEYWORDS = {
+    "coffee",
+    "espresso",
+    "americano",
+    "latte",
+    "cappuccino",
+    "raf",
+    "flat white",
+    "mocha",
+    "кофе",
+    "капучино",
+    "латте",
+    "раф",
+    "американо",
+}
+
 ACHIEVEMENT_DEFINITIONS: list[dict[str, Any]] = [
     {
         "key": "first_bite",
@@ -338,6 +354,62 @@ ACHIEVEMENT_DEFINITIONS: list[dict[str, Any]] = [
         "title": "Weekend Hero",
         "description": "Log 2 meals on both Saturday and Sunday",
         "metric": "weekend_double_days",
+        "target": 1,
+    },
+    {
+        "key": "snack_master",
+        "title": "Хрусть-хрусть",
+        "description": "Log a snack or build a day with 4 or more meals",
+        "metric": "snack_master_days",
+        "target": 1,
+    },
+    {
+        "key": "holy_trinity",
+        "title": "Святая троица",
+        "description": "Reach at least 75% of your protein, fat, and carbs goals in one day",
+        "metric": "holy_trinity_days",
+        "target": 1,
+    },
+    {
+        "key": "meal_intervals",
+        "title": "Интервалы",
+        "description": "Log two meals 3 to 5 hours apart",
+        "metric": "meal_interval_pairs",
+        "target": 1,
+    },
+    {
+        "key": "thursday_checkpoint",
+        "title": "Экватор пройден",
+        "description": "Log at least 2 meals on a Thursday",
+        "metric": "thursday_two_meal_days",
+        "target": 1,
+    },
+    {
+        "key": "hat_trick",
+        "title": "Хет-трик",
+        "description": "Stay in the 85-115% calorie corridor for 3 days in a row",
+        "metric": "calorie_corridor_streak_days",
+        "target": 3,
+    },
+    {
+        "key": "coffee_ninja",
+        "title": "Кофеиновый ниндзя",
+        "description": "Log coffee in any form",
+        "metric": "coffee_logs",
+        "target": 1,
+    },
+    {
+        "key": "micro_control",
+        "title": "Микро-контроль",
+        "description": "Log something under 50 kcal",
+        "metric": "micro_logs",
+        "target": 1,
+    },
+    {
+        "key": "big_feast",
+        "title": "Пир на весь мир",
+        "description": "Log one meal over 900 kcal",
+        "metric": "big_feast_meals",
         "target": 1,
     },
 ]
@@ -542,10 +614,10 @@ def get_user_timezone(conn: DBConnection, user_id: str) -> ZoneInfo:
         return ZoneInfo("UTC")
 
 
-def get_goal_for_day(conn: DBConnection, user_id: str, day: date) -> tuple[float | None, float | None]:
+def get_goal_for_day(conn: DBConnection, user_id: str, day: date) -> dict[str, float] | None:
     goal_row = conn.execute(
         """
-        SELECT calories, protein_g
+        SELECT calories, protein_g, carbs_g, fat_g
         FROM daily_goals
         WHERE user_id = ? AND effective_from <= ?
         ORDER BY effective_from DESC
@@ -554,8 +626,13 @@ def get_goal_for_day(conn: DBConnection, user_id: str, day: date) -> tuple[float
         (user_id, day.isoformat()),
     ).fetchone()
     if not goal_row:
-        return None, None
-    return float(goal_row["calories"]), float(goal_row["protein_g"])
+        return None
+    return {
+        "calories": float(goal_row["calories"]),
+        "protein_g": float(goal_row["protein_g"]),
+        "carbs_g": float(goal_row["carbs_g"]),
+        "fat_g": float(goal_row["fat_g"]),
+    }
 
 
 def build_achievement_state(conn: DBConnection, user_id: str) -> tuple[dict[str, int], StreakOut]:
@@ -615,6 +692,9 @@ def build_achievement_state(conn: DBConnection, user_id: str) -> tuple[dict[str,
     honesty_logs = 0
     late_night_logs = 0
     green_logs = 0
+    coffee_logs = 0
+    micro_logs = 0
+    big_feast_meals = 0
 
     for meal in meals_by_id.values():
         local_dt = meal["eaten_at"]
@@ -628,13 +708,21 @@ def build_achievement_state(conn: DBConnection, user_id: str) -> tuple[dict[str,
                 "unique_items": set(),
                 "calories": 0.0,
                 "protein_g": 0.0,
+                "carbs_g": 0.0,
+                "fat_g": 0.0,
                 "breakfast_before_10": False,
+                "meal_times": [],
+                "has_snack": False,
             },
         )
         day_state["meal_count"] += 1
         day_state["unique_items"].update(normalize_text(name) for name in item_names if name)
-        day_state["calories"] += sum(float(item["calories"]) for item in meal["items"])
+        meal_calories = sum(float(item["calories"]) for item in meal["items"])
+        day_state["calories"] += meal_calories
         day_state["protein_g"] += sum(float(item["protein_g"]) for item in meal["items"])
+        day_state["carbs_g"] += sum(float(item["carbs_g"]) for item in meal["items"])
+        day_state["fat_g"] += sum(float(item["fat_g"]) for item in meal["items"])
+        day_state["meal_times"].append(local_dt)
 
         if meal["source"] == "ai":
             ai_meals += 1
@@ -644,10 +732,18 @@ def build_achievement_state(conn: DBConnection, user_id: str) -> tuple[dict[str,
             honesty_logs += 1
         if has_any_keyword(texts, GREEN_LIGHT_KEYWORDS):
             green_logs += 1
+        if has_any_keyword(texts, COFFEE_KEYWORDS):
+            coffee_logs += 1
         if local_dt.hour >= 22:
             late_night_logs += 1
         if meal["meal_type"] == "breakfast" and local_dt.hour < 10:
             day_state["breakfast_before_10"] = True
+        if meal["meal_type"] == "snack":
+            day_state["has_snack"] = True
+        if any(float(item["calories"]) < 50 for item in meal["items"]):
+            micro_logs += 1
+        if meal_calories >= 900:
+            big_feast_meals += 1
 
     meal_days = sorted(daily.keys(), reverse=True)
     current_streak_days, longest_streak_days = compute_streak(meal_days)
@@ -680,6 +776,11 @@ def build_achievement_state(conn: DBConnection, user_id: str) -> tuple[dict[str,
     comeback_days = 0
     weekend_double_days = 0
     calorie_sniper_days = 0
+    snack_master_days = 0
+    holy_trinity_days = 0
+    meal_interval_pairs = 0
+    thursday_two_meal_days = 0
+    calorie_corridor_days: list[date] = []
 
     sorted_asc = sorted(meal_days)
     for idx in range(1, len(sorted_asc)):
@@ -687,13 +788,37 @@ def build_achievement_state(conn: DBConnection, user_id: str) -> tuple[dict[str,
             comeback_days += 1
 
     for day, day_state in daily.items():
+        if day_state["has_snack"] or day_state["meal_count"] >= 4:
+            snack_master_days += 1
+        if day.weekday() == 3 and day_state["meal_count"] >= 2:
+            thursday_two_meal_days += 1
         if day.weekday() == 5 and day_state["meal_count"] >= 2:
             sunday_state = daily.get(day + timedelta(days=1))
             if sunday_state and sunday_state["meal_count"] >= 2:
                 weekend_double_days += 1
-        goal_calories, _goal_protein = get_goal_for_day(conn, user_id, day)
-        if goal_calories is not None and abs(day_state["calories"] - goal_calories) <= 20:
+        goal = get_goal_for_day(conn, user_id, day)
+        meal_times = sorted(day_state["meal_times"])
+        for idx in range(1, len(meal_times)):
+            gap_hours = (meal_times[idx] - meal_times[idx - 1]).total_seconds() / 3600
+            if 3 <= gap_hours <= 5:
+                meal_interval_pairs += 1
+                break
+        if goal and abs(day_state["calories"] - goal["calories"]) <= 20:
             calorie_sniper_days += 1
+        if goal and goal["calories"] > 0 and 0.85 * goal["calories"] <= day_state["calories"] <= 1.15 * goal["calories"]:
+            calorie_corridor_days.append(day)
+        if (
+            goal
+            and goal["protein_g"] > 0
+            and goal["carbs_g"] > 0
+            and goal["fat_g"] > 0
+            and day_state["protein_g"] >= 0.75 * goal["protein_g"]
+            and day_state["carbs_g"] >= 0.75 * goal["carbs_g"]
+            and day_state["fat_g"] >= 0.75 * goal["fat_g"]
+        ):
+            holy_trinity_days += 1
+
+    calorie_corridor_streak_days, _ = compute_streak(sorted(calorie_corridor_days, reverse=True))
 
     metrics = {
         "total_meals": total_meals,
@@ -703,10 +828,18 @@ def build_achievement_state(conn: DBConnection, user_id: str) -> tuple[dict[str,
         "honesty_logs": honesty_logs,
         "late_night_logs": late_night_logs,
         "green_logs": green_logs,
+        "coffee_logs": coffee_logs,
+        "micro_logs": micro_logs,
+        "big_feast_meals": big_feast_meals,
         "max_unique_items_day": max_unique_items_day,
         "breakfast_streak_days": breakfast_streak_days,
         "current_streak_days": current_streak_days,
         "calorie_sniper_days": calorie_sniper_days,
+        "snack_master_days": snack_master_days,
+        "holy_trinity_days": holy_trinity_days,
+        "meal_interval_pairs": meal_interval_pairs,
+        "thursday_two_meal_days": thursday_two_meal_days,
+        "calorie_corridor_streak_days": calorie_corridor_streak_days,
         "comeback_days": comeback_days,
         "weekend_double_days": weekend_double_days,
     }
