@@ -178,7 +178,7 @@ def test_meals_and_dashboard_flow() -> None:
 
         profile = client.get("/profile", headers=headers)
         assert profile.status_code == 200
-        assert profile.json()["currentXp"] == 20
+        assert profile.json()["currentXp"] == 5
 
         dashboard = client.get("/dashboard", params={"date": "2026-03-10"}, headers=headers)
         assert dashboard.status_code == 200
@@ -196,9 +196,16 @@ def test_meals_and_dashboard_flow() -> None:
         assert deleted.status_code == 204
 
 
-def test_progression_awards_day_completion_and_weekly_goal_levels_up() -> None:
+def test_progression_awards_day_completion_streak_and_calorie_goal_levels_up() -> None:
     with make_client() as client:
         headers = auth_headers(client)
+
+        goal_set = client.put(
+            "/goals",
+            json={"calories": 600, "proteinG": 120, "carbsG": 200, "fatG": 70},
+            headers=headers,
+        )
+        assert goal_set.status_code == 200
 
         for day_index in range(5):
             current_day = date(2026, 3, 9 + day_index)
@@ -223,9 +230,9 @@ def test_progression_awards_day_completion_and_weekly_goal_levels_up() -> None:
         profile = client.get("/profile", headers=headers)
         assert profile.status_code == 200
         payload = profile.json()
-        assert payload["level"] == 4
-        assert payload["currentXp"] == 70
-        assert payload["xpRequired"] == 300
+        assert payload["level"] == 2
+        assert payload["currentXp"] == 55
+        assert payload["xpRequired"] == 200
 
 
 def test_scan_job_created_and_marked_failed_without_key() -> None:

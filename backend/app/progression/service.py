@@ -3,17 +3,19 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..db import DBConnection, transaction
 from .schemas import LevelProgressOut
 
-MEAL_LOGGED_XP = 20
-DAY_COMPLETED_XP = 50
-WEEKLY_GOAL_XP = 120
+MEAL_LOGGED_XP = 5
+DAY_COMPLETED_XP = 10
+STREAK_MAINTAINED_XP = 10
+CALORIE_GOAL_REACHED_XP = 20
 COMPLETED_DAY_MEALS = 3
-WEEKLY_COMPLETED_DAYS_TARGET = 5
+CALORIE_GOAL_LOWER_BOUND = 0.85
+CALORIE_GOAL_UPPER_BOUND = 1.15
 
 
 def now_utc() -> datetime:
@@ -151,27 +153,58 @@ def count_meals_for_local_day(conn: DBConnection, user_id: str, timezone_name: s
     return int(row["cnt"]) if row else 0
 
 
-def count_completed_days_for_week(conn: DBConnection, user_id: str, timezone_name: str, week_start: date, week_end: date) -> int:
+def get_local_logged_days_desc(conn: DBConnection, user_id: str, timezone_name: str) -> list[date]:
+    rows = conn.execute(
+        """
+        SELECT DISTINCT DATE(eaten_at AT TIME ZONE ?) AS local_day
+        FROM meals
+        WHERE user_id = ?
+        ORDER BY local_day DESC
+        """,
+        (timezone_name, user_id),
+    ).fetchall()
+    return [row["local_day"] for row in rows]
+
+
+def get_current_streak_days(conn: DBConnection, user_id: str, timezone_name: str) -> int:
+    days = get_local_logged_days_desc(conn, user_id, timezone_name)
+    if not days:
+        return 0
+    streak = 1
+    for index in range(1, len(days)):
+        if (days[index - 1] - days[index]).days == 1:
+            streak += 1
+        else:
+            break
+    return streak
+
+
+def get_goal_for_day(conn: DBConnection, user_id: str, local_day: date) -> int | None:
     row = conn.execute(
         """
-        WITH localized AS (
-          SELECT DATE(eaten_at AT TIME ZONE ?) AS local_day
-          FROM meals
-          WHERE user_id = ?
-        ),
-        daily AS (
-          SELECT local_day, COUNT(*)::int AS meal_count
-          FROM localized
-          GROUP BY local_day
-        )
-        SELECT COUNT(*)::int AS cnt
-        FROM daily
-        WHERE local_day BETWEEN ? AND ?
-          AND meal_count >= ?
+        SELECT calories
+        FROM daily_goals
+        WHERE user_id = ? AND effective_from <= ?
+        ORDER BY effective_from DESC
+        LIMIT 1
         """,
-        (timezone_name, user_id, week_start.isoformat(), week_end.isoformat(), COMPLETED_DAY_MEALS),
+        (user_id, local_day.isoformat()),
     ).fetchone()
-    return int(row["cnt"]) if row else 0
+    return int(row["calories"]) if row else None
+
+
+def get_calories_for_local_day(conn: DBConnection, user_id: str, timezone_name: str, local_day: date) -> int:
+    row = conn.execute(
+        """
+        SELECT COALESCE(SUM(mi.calories), 0)::int AS total
+        FROM meals m
+        JOIN meal_items mi ON mi.meal_id = m.id
+        WHERE m.user_id = ?
+          AND DATE(m.eaten_at AT TIME ZONE ?) = ?
+        """,
+        (user_id, timezone_name, local_day.isoformat()),
+    ).fetchone()
+    return int(row["total"]) if row else 0
 
 
 def award_progress_for_meal(conn: DBConnection, user_id: str, meal_id: str) -> ProgressionAwardResult:
@@ -191,9 +224,6 @@ def award_progress_for_meal(conn: DBConnection, user_id: str, meal_id: str) -> P
     timezone_name = str(timezone)
     local_dt = str_to_dt(meal_row["eaten_at"]).astimezone(timezone)
     local_day = local_dt.date()
-    iso_year, iso_week, _ = local_day.isocalendar()
-    week_start = local_day - timedelta(days=local_day.weekday())
-    week_end = week_start + timedelta(days=6)
 
     leveled_up = False
     result = award_xp_once(
@@ -217,14 +247,27 @@ def award_progress_for_meal(conn: DBConnection, user_id: str, meal_id: str) -> P
         )
         leveled_up = leveled_up or result.leveledUp
 
-    if count_completed_days_for_week(conn, user_id, timezone_name, week_start, week_end) >= WEEKLY_COMPLETED_DAYS_TARGET:
+    if get_current_streak_days(conn, user_id, timezone_name) >= 2:
         result = award_xp_once(
             conn,
             user_id,
-            event_name="xp_weekly_goal",
-            event_key=f"{iso_year}-W{iso_week:02d}",
-            amount=WEEKLY_GOAL_XP,
-            payload={"week": f"{iso_year}-W{iso_week:02d}"},
+            event_name="xp_streak_maintained",
+            event_key=local_day.isoformat(),
+            amount=STREAK_MAINTAINED_XP,
+            payload={"day": local_day.isoformat()},
+        )
+        leveled_up = leveled_up or result.leveledUp
+
+    goal_calories = get_goal_for_day(conn, user_id, local_day)
+    total_calories = get_calories_for_local_day(conn, user_id, timezone_name, local_day)
+    if goal_calories and goal_calories * CALORIE_GOAL_LOWER_BOUND <= total_calories <= goal_calories * CALORIE_GOAL_UPPER_BOUND:
+        result = award_xp_once(
+            conn,
+            user_id,
+            event_name="xp_calorie_goal_reached",
+            event_key=local_day.isoformat(),
+            amount=CALORIE_GOAL_REACHED_XP,
+            payload={"day": local_day.isoformat()},
         )
         leveled_up = leveled_up or result.leveledUp
 
