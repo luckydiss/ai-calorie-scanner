@@ -61,6 +61,10 @@ def _reset_db(database_url: str) -> None:
             cur.execute(
                 """
                 TRUNCATE TABLE
+                  events,
+                  user_achievements,
+                  achievements,
+                  streaks,
                   scan_results,
                   scan_jobs,
                   meal_items,
