@@ -49,6 +49,21 @@ async def send_webapp_button(
         raise RuntimeError(f"sendMessage failed: {body}")
 
 
+async def set_chat_menu_button(client: httpx.AsyncClient, api_base: str, webapp_url: str) -> None:
+    payload = {
+        "menu_button": {
+            "type": "web_app",
+            "text": "Open App",
+            "web_app": {"url": webapp_url},
+        }
+    }
+    response = await client.post(f"{api_base}/setChatMenuButton", json=payload)
+    response.raise_for_status()
+    body = response.json()
+    if not body.get("ok"):
+        raise RuntimeError(f"setChatMenuButton failed: {body}")
+
+
 def iter_message_updates(updates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for update in updates:
@@ -76,6 +91,11 @@ async def run_bot() -> None:
     timeout_seconds = 50
 
     async with httpx.AsyncClient(timeout=65) as client:
+        try:
+            await set_chat_menu_button(client, api_base, webapp_url)
+            logger.info(json.dumps({"event": "bot_menu_button_synced", "webapp_url": webapp_url}))
+        except Exception as exc:  # noqa: BLE001
+            logger.error(json.dumps({"event": "bot_menu_button_sync_failed", "error": str(exc)}))
         logger.info(json.dumps({"event": "bot_started"}))
         while True:
             try:
