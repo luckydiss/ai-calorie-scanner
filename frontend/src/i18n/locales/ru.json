@@ -82,7 +82,16 @@
     "level_label": "Уровень {level}",
     "xp_progress": "{current} / {required} XP",
     "xp_short": "{current}/{required} XP",
-    "level_up_description": "Ты набрал достаточно XP для нового уровня."
+    "level_up_description": "Ты набрал достаточно XP для нового уровня.",
+    "modal_title": "??????? ???????",
+    "current_progress": "??????? ????????",
+    "how_to_earn": "??? ???????? XP",
+    "next_level": "????????? ???????",
+    "xp_required_label": "????? {required} XP",
+    "earn_meal": "???????????? ????? ????",
+    "earn_day": "??????? ????",
+    "earn_streak": "???????? ?????",
+    "earn_goal": "??????? ? ???? ?? ????????"
   },
   "daily_log": {
     "title": "Дневник",
@@ -189,30 +198,105 @@
     "provider_unknown_error": "Неизвестная ошибка провайдера. Попробуй другое изображение."
   },
   "achievements": {
-    "first_bite": { "title": "Первый укус", "description": "Записать первый прием пищи" },
-    "scanner_in_play": { "title": "Сканер в деле", "description": "Подтвердить один AI-прием пищи" },
-    "manual_control": { "title": "Ручной контроль", "description": "Добавить один прием пищи вручную" },
-    "precise_edit": { "title": "Точный штрих", "description": "Пересчитать AI-результат перед подтверждением" },
-    "sweet_truth": { "title": "Сладкая правда", "description": "Честно записать что-то вредное" },
-    "night_owl": { "title": "Полуночник", "description": "Записать прием пищи после 22:00" },
-    "green_light": { "title": "Зеленый свет", "description": "Записать фрукт или овощ" },
-    "gourmet": { "title": "Гурман", "description": "Записать 5 разных продуктов за день" },
-    "morning_magic_bronze": { "title": "Магия утра", "description": "Записать завтрак до 10:00" },
-    "morning_magic_silver": { "title": "Магия утра", "description": "Записать завтрак до 10:00 два дня подряд" },
-    "morning_magic_gold": { "title": "Магия утра", "description": "Записать завтрак до 10:00 три дня подряд" },
-    "warm_streak_bronze": { "title": "Теплый стрик", "description": "Записывать еду 2 дня подряд" },
-    "warm_streak_silver": { "title": "Теплый стрик", "description": "Записывать еду 4 дня подряд" },
-    "warm_streak_gold": { "title": "Теплый стрик", "description": "Записывать еду 7 дней подряд" },
-    "calorie_sniper": { "title": "Калорийный снайпер", "description": "Закрыть день в пределах 20 ккал от цели" },
-    "back_in_game": { "title": "Возврат в игру", "description": "Вернуться после пропуска хотя бы одного дня" },
-    "weekend_hero": { "title": "Герой выходного дня", "description": "Записать по 2 приема пищи в субботу и воскресенье" },
-    "snack_master": { "title": "Хрусть-хрусть", "description": "Записать перекус или собрать день с 4+ приемами пищи" },
-    "holy_trinity": { "title": "Святая троица", "description": "Выполнить хотя бы 75% цели по белкам, жирам и углеводам за день" },
-    "meal_intervals": { "title": "Интервалы", "description": "Записать два приема пищи с интервалом 3–5 часов" },
-    "thursday_checkpoint": { "title": "Экватор пройден", "description": "Записать хотя бы 2 приема пищи в четверг" },
-    "hat_trick": { "title": "Хет-трик", "description": "3 дня подряд держаться в коридоре 85–115% калорий" },
-    "coffee_ninja": { "title": "Кофеиновый ниндзя", "description": "Записать кофе в любом виде" },
-    "micro_control": { "title": "Микро-контроль", "description": "Записать что-то менее 50 ккал" },
-    "big_feast": { "title": "Пир на весь мир", "description": "Записать один прием пищи больше 900 ккал" }
+    "first_bite": {
+      "title": "Первый укус",
+      "description": "Записать первый прием пищи"
+    },
+    "scanner_in_play": {
+      "title": "Сканер в деле",
+      "description": "Подтвердить один AI-прием пищи"
+    },
+    "manual_control": {
+      "title": "Ручной контроль",
+      "description": "Добавить один прием пищи вручную"
+    },
+    "precise_edit": {
+      "title": "Точный штрих",
+      "description": "Пересчитать AI-результат перед подтверждением"
+    },
+    "sweet_truth": {
+      "title": "Сладкая правда",
+      "description": "Честно записать что-то вредное"
+    },
+    "night_owl": {
+      "title": "Полуночник",
+      "description": "Записать прием пищи после 22:00"
+    },
+    "green_light": {
+      "title": "Зеленый свет",
+      "description": "Записать фрукт или овощ"
+    },
+    "gourmet": {
+      "title": "Гурман",
+      "description": "Записать 5 разных продуктов за день"
+    },
+    "morning_magic_bronze": {
+      "title": "Магия утра",
+      "description": "Записать завтрак до 10:00"
+    },
+    "morning_magic_silver": {
+      "title": "Магия утра",
+      "description": "Записать завтрак до 10:00 два дня подряд"
+    },
+    "morning_magic_gold": {
+      "title": "Магия утра",
+      "description": "Записать завтрак до 10:00 три дня подряд"
+    },
+    "warm_streak_bronze": {
+      "title": "Теплый стрик",
+      "description": "Записывать еду 2 дня подряд"
+    },
+    "warm_streak_silver": {
+      "title": "Теплый стрик",
+      "description": "Записывать еду 4 дня подряд"
+    },
+    "warm_streak_gold": {
+      "title": "Теплый стрик",
+      "description": "Записывать еду 7 дней подряд"
+    },
+    "calorie_sniper": {
+      "title": "Калорийный снайпер",
+      "description": "Закрыть день в пределах 20 ккал от цели"
+    },
+    "back_in_game": {
+      "title": "Возврат в игру",
+      "description": "Вернуться после пропуска хотя бы одного дня"
+    },
+    "weekend_hero": {
+      "title": "Герой выходного дня",
+      "description": "Записать по 2 приема пищи в субботу и воскресенье"
+    },
+    "snack_master": {
+      "title": "Хрусть-хрусть",
+      "description": "Записать перекус или собрать день с 4+ приемами пищи"
+    },
+    "holy_trinity": {
+      "title": "Святая троица",
+      "description": "Выполнить хотя бы 75% цели по белкам, жирам и углеводам за день"
+    },
+    "meal_intervals": {
+      "title": "Интервалы",
+      "description": "Записать два приема пищи с интервалом 3–5 часов"
+    },
+    "thursday_checkpoint": {
+      "title": "Экватор пройден",
+      "description": "Записать хотя бы 2 приема пищи в четверг"
+    },
+    "hat_trick": {
+      "title": "Хет-трик",
+      "description": "3 дня подряд держаться в коридоре 85–115% калорий"
+    },
+    "coffee_ninja": {
+      "title": "Кофеиновый ниндзя",
+      "description": "Записать кофе в любом виде"
+    },
+    "micro_control": {
+      "title": "Микро-контроль",
+      "description": "Записать что-то менее 50 ккал"
+    },
+    "big_feast": {
+      "title": "Пир на весь мир",
+      "description": "Записать один прием пищи больше 900 ккал"
+    }
   }
 }

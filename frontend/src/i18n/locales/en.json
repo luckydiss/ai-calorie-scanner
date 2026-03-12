@@ -82,7 +82,16 @@
     "level_label": "Level {level}",
     "xp_progress": "{current} / {required} XP",
     "xp_short": "{current}/{required} XP",
-    "level_up_description": "You earned enough XP to reach the next level."
+    "level_up_description": "You earned enough XP to reach the next level.",
+    "modal_title": "Level System",
+    "current_progress": "Current progress",
+    "how_to_earn": "How to earn XP",
+    "next_level": "Next level",
+    "xp_required_label": "{required} XP required",
+    "earn_meal": "Log a meal",
+    "earn_day": "Complete a day",
+    "earn_streak": "Maintain streak",
+    "earn_goal": "Reach calorie goal"
   },
   "daily_log": {
     "title": "Daily Log",
@@ -189,30 +198,105 @@
     "provider_unknown_error": "Unknown provider error. Retry with another image."
   },
   "achievements": {
-    "first_bite": { "title": "First Bite", "description": "Log your first meal" },
-    "scanner_in_play": { "title": "Scanner in Play", "description": "Confirm one AI meal" },
-    "manual_control": { "title": "Manual Control", "description": "Add one meal manually" },
-    "precise_edit": { "title": "Precise Edit", "description": "Recalculate one AI result before confirming" },
-    "sweet_truth": { "title": "Sweet Truth", "description": "Log something indulgent without hiding it" },
-    "night_owl": { "title": "Night Owl", "description": "Log a meal after 22:00" },
-    "green_light": { "title": "Green Light", "description": "Log a fruit or vegetable" },
-    "gourmet": { "title": "Gourmet", "description": "Log 5 different foods in one day" },
-    "morning_magic_bronze": { "title": "Morning Magic", "description": "Log breakfast before 10:00" },
-    "morning_magic_silver": { "title": "Morning Magic", "description": "Log breakfast before 10:00 on 2 days in a row" },
-    "morning_magic_gold": { "title": "Morning Magic", "description": "Log breakfast before 10:00 on 3 days in a row" },
-    "warm_streak_bronze": { "title": "Warm Streak", "description": "Log meals 2 days in a row" },
-    "warm_streak_silver": { "title": "Warm Streak", "description": "Log meals 4 days in a row" },
-    "warm_streak_gold": { "title": "Warm Streak", "description": "Log meals 7 days in a row" },
-    "calorie_sniper": { "title": "Calorie Sniper", "description": "Finish a day within 20 kcal of your goal" },
-    "back_in_game": { "title": "Back in the Game", "description": "Return after skipping at least one day" },
-    "weekend_hero": { "title": "Weekend Hero", "description": "Log 2 meals on both Saturday and Sunday" },
-    "snack_master": { "title": "Crunch Crunch", "description": "Log a snack or build a day with 4 or more meals" },
-    "holy_trinity": { "title": "Holy Trinity", "description": "Reach at least 75% of your protein, fat, and carbs goals in one day" },
-    "meal_intervals": { "title": "Intervals", "description": "Log two meals 3 to 5 hours apart" },
-    "thursday_checkpoint": { "title": "Halfway There", "description": "Log at least 2 meals on a Thursday" },
-    "hat_trick": { "title": "Hat-trick", "description": "Stay in the 85-115% calorie corridor for 3 days in a row" },
-    "coffee_ninja": { "title": "Coffee Ninja", "description": "Log coffee in any form" },
-    "micro_control": { "title": "Micro Control", "description": "Log something under 50 kcal" },
-    "big_feast": { "title": "Big Feast", "description": "Log one meal over 900 kcal" }
+    "first_bite": {
+      "title": "First Bite",
+      "description": "Log your first meal"
+    },
+    "scanner_in_play": {
+      "title": "Scanner in Play",
+      "description": "Confirm one AI meal"
+    },
+    "manual_control": {
+      "title": "Manual Control",
+      "description": "Add one meal manually"
+    },
+    "precise_edit": {
+      "title": "Precise Edit",
+      "description": "Recalculate one AI result before confirming"
+    },
+    "sweet_truth": {
+      "title": "Sweet Truth",
+      "description": "Log something indulgent without hiding it"
+    },
+    "night_owl": {
+      "title": "Night Owl",
+      "description": "Log a meal after 22:00"
+    },
+    "green_light": {
+      "title": "Green Light",
+      "description": "Log a fruit or vegetable"
+    },
+    "gourmet": {
+      "title": "Gourmet",
+      "description": "Log 5 different foods in one day"
+    },
+    "morning_magic_bronze": {
+      "title": "Morning Magic",
+      "description": "Log breakfast before 10:00"
+    },
+    "morning_magic_silver": {
+      "title": "Morning Magic",
+      "description": "Log breakfast before 10:00 on 2 days in a row"
+    },
+    "morning_magic_gold": {
+      "title": "Morning Magic",
+      "description": "Log breakfast before 10:00 on 3 days in a row"
+    },
+    "warm_streak_bronze": {
+      "title": "Warm Streak",
+      "description": "Log meals 2 days in a row"
+    },
+    "warm_streak_silver": {
+      "title": "Warm Streak",
+      "description": "Log meals 4 days in a row"
+    },
+    "warm_streak_gold": {
+      "title": "Warm Streak",
+      "description": "Log meals 7 days in a row"
+    },
+    "calorie_sniper": {
+      "title": "Calorie Sniper",
+      "description": "Finish a day within 20 kcal of your goal"
+    },
+    "back_in_game": {
+      "title": "Back in the Game",
+      "description": "Return after skipping at least one day"
+    },
+    "weekend_hero": {
+      "title": "Weekend Hero",
+      "description": "Log 2 meals on both Saturday and Sunday"
+    },
+    "snack_master": {
+      "title": "Crunch Crunch",
+      "description": "Log a snack or build a day with 4 or more meals"
+    },
+    "holy_trinity": {
+      "title": "Holy Trinity",
+      "description": "Reach at least 75% of your protein, fat, and carbs goals in one day"
+    },
+    "meal_intervals": {
+      "title": "Intervals",
+      "description": "Log two meals 3 to 5 hours apart"
+    },
+    "thursday_checkpoint": {
+      "title": "Halfway There",
+      "description": "Log at least 2 meals on a Thursday"
+    },
+    "hat_trick": {
+      "title": "Hat-trick",
+      "description": "Stay in the 85-115% calorie corridor for 3 days in a row"
+    },
+    "coffee_ninja": {
+      "title": "Coffee Ninja",
+      "description": "Log coffee in any form"
+    },
+    "micro_control": {
+      "title": "Micro Control",
+      "description": "Log something under 50 kcal"
+    },
+    "big_feast": {
+      "title": "Big Feast",
+      "description": "Log one meal over 900 kcal"
+    }
   }
 }
