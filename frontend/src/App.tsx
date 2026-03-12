@@ -13,11 +13,13 @@ import {
   type Profile,
   type ScanStatus
 } from "./api";
+import { SUPPORTED_LOCALES, useI18n, type SupportedLocale } from "./i18n";
 
 type Tab = "dashboard" | "daily-log" | "quick-add" | "onboarding" | "add-meal";
 
 type OnboardingForm = {
   timezone: string;
+  language: SupportedLocale;
   heightCm: string;
   weightKg: string;
   goalType: GoalType;
@@ -103,20 +105,7 @@ function detectMealTypeFromLocalDatetime(localDatetime: string): MealType {
 }
 
 function humanizeScanError(errorCode: string | null): string {
-  if (!errorCode) return "Unknown error";
-  const map: Record<string, string> = {
-    provider_auth_missing: "OpenRouter API key is missing on backend",
-    provider_invalid_image: "Image was rejected by model provider. Try another photo.",
-    provider_auth_invalid: "OpenRouter key is invalid or expired",
-    provider_quota_exceeded: "OpenRouter quota/payment issue",
-    provider_forbidden: "Access to model is denied",
-    provider_rate_limited: "Rate limit reached, retry in a few seconds",
-    provider_internal_error: "Provider internal error, retry later",
-    provider_connect_error: "Network connect error from backend to OpenRouter",
-    provider_timeout: "Model timeout, retry with another image",
-    provider_unknown_error: "Unknown provider error. Retry with another image."
-  };
-  return map[errorCode] ?? errorCode;
+  return errorCode ?? "provider_unknown_error";
 }
 
 function sleep(ms: number): Promise<void> {
@@ -128,6 +117,16 @@ function tierLabel(tier: Achievement["tier"]): string {
   if (tier === "silver") return "Silver";
   if (tier === "gold") return "Gold";
   return "";
+}
+
+function translateAchievementField(
+  achievement: Achievement,
+  field: "title" | "description",
+  t: (key: string, params?: Record<string, string | number>) => string,
+  hasTranslation: (key: string) => boolean
+): string {
+  const key = `achievements.${achievement.key}.${field}`;
+  return hasTranslation(key) ? t(key) : achievement[field];
 }
 
 function buildAchievementTracks(items: Achievement[]): AchievementTrack[] {
@@ -199,6 +198,7 @@ function createCelebrationParticles(): CelebrationParticle[] {
 }
 
 function AchievementUnlockCelebration(props: { celebration: UnlockCelebration | null }) {
+  const { t, hasTranslation } = useI18n();
   if (!props.celebration) return null;
   return (
     <div className="achievement-unlock-overlay">
@@ -228,9 +228,13 @@ function AchievementUnlockCelebration(props: { celebration: UnlockCelebration | 
             <path d="M12 2.75a.75.75 0 0 1 .69.45l2.04 4.78 5.17.42a.75.75 0 0 1 .43 1.31l-3.93 3.38 1.18 5.02a.75.75 0 0 1-1.12.8L12 16.53l-4.46 2.63a.75.75 0 0 1-1.12-.8l1.18-5.02-3.93-3.38a.75.75 0 0 1 .43-1.31l5.17-.42 2.04-4.78a.75.75 0 0 1 .69-.45Z" />
           </svg>
         </div>
-        <p className="text-sm font-semibold text-ink">Achievement unlocked!</p>
-        <p className="mt-1 text-sm font-semibold text-slate-800">{props.celebration.achievement.title}</p>
-        <p className="mt-1 text-xs text-slate-600">{props.celebration.achievement.description}</p>
+        <p className="text-sm font-semibold text-ink">{t("celebration.unlocked")}</p>
+        <p className="mt-1 text-sm font-semibold text-slate-800">
+          {translateAchievementField(props.celebration.achievement, "title", t, hasTranslation)}
+        </p>
+        <p className="mt-1 text-xs text-slate-600">
+          {translateAchievementField(props.celebration.achievement, "description", t, hasTranslation)}
+        </p>
       </div>
     </div>
   );
@@ -284,6 +288,7 @@ function MacroBar(props: { label: string; value: number; goal: number; color: st
 }
 
 function DashboardView(props: { dashboard: Dashboard; achievements: AchievementsResponse | null }) {
+  const { t, hasTranslation } = useI18n();
   const { dashboard, achievements } = props;
   const [boardExpanded, setBoardExpanded] = useState(false);
   const [showAllInProgress, setShowAllInProgress] = useState(false);
@@ -318,28 +323,28 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
   return (
     <section className="space-y-4">
       <div className="rounded-3xl bg-white p-6 shadow-sm">
-        <p className="text-sm text-slate-500">Daily Summary</p>
+        <p className="text-sm text-slate-500">{t("summary.title")}</p>
         <h1 className="mt-2 text-3xl font-bold text-ink">{dashboard.totals.calories} kcal</h1>
-        <p className="text-sm text-slate-500">Goal {dashboard.goals.calories} kcal</p>
+        <p className="text-sm text-slate-500">{t("summary.goal", { calories: dashboard.goals.calories })}</p>
         <div className="mt-4 h-3 rounded-full bg-slate-100">
           <div className="h-3 rounded-full bg-primary" style={{ width: `${kcalPercent}%` }} />
         </div>
       </div>
       <div className="grid grid-cols-3 gap-3">
         <MacroBar
-          label="Protein"
+          label={t("macros.protein")}
           value={dashboard.totals.proteinG}
           goal={dashboard.goals.proteinG}
           color="bg-emerald-500"
         />
         <MacroBar
-          label="Carbs"
+          label={t("macros.carbs")}
           value={dashboard.totals.carbsG}
           goal={dashboard.goals.carbsG}
           color="bg-amber-500"
         />
         <MacroBar
-          label="Fat"
+          label={t("macros.fat")}
           value={dashboard.totals.fatG}
           goal={dashboard.goals.fatG}
           color="bg-blue-500"
@@ -356,9 +361,12 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
             <div className="achievement-board-preview min-h-[132px]">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-semibold text-ink">Achievement Board</h2>
+                  <h2 className="text-lg font-semibold text-ink">{t("achievement_board.title")}</h2>
                   <p className="mt-1 text-sm text-slate-600">
-                    Streak {achievements.streak.currentDays} days • Best {achievements.streak.longestDays} days
+                    {t("achievement_board.streak", {
+                      current: achievements.streak.currentDays,
+                      best: achievements.streak.longestDays
+                    })}
                   </p>
                 </div>
                 <span
@@ -372,16 +380,22 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
                 </span>
               </div>
               <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Latest unlock</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                  {t("achievement_board.latest_unlock")}
+                </p>
                 {latestUnlocked ? (
                   <>
-                    <p className="mt-1 text-sm font-semibold text-ink">{latestUnlocked.title}</p>
-                    <p className="text-xs text-slate-600">{latestUnlocked.description}</p>
+                    <p className="mt-1 text-sm font-semibold text-ink">
+                      {translateAchievementField(latestUnlocked, "title", t, hasTranslation)}
+                    </p>
+                    <p className="text-xs text-slate-600">
+                      {translateAchievementField(latestUnlocked, "description", t, hasTranslation)}
+                    </p>
                   </>
                 ) : (
                   <>
-                    <p className="mt-1 text-sm font-semibold text-ink">No unlock yet</p>
-                    <p className="text-xs text-slate-600">Log your next meal to start the board.</p>
+                    <p className="mt-1 text-sm font-semibold text-ink">{t("achievement_board.latest_unlock_empty_title")}</p>
+                    <p className="text-xs text-slate-600">{t("achievement_board.latest_unlock_empty_description")}</p>
                   </>
                 )}
               </div>
@@ -393,7 +407,10 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="mt-1 text-sm font-medium text-slate-700">
-                      {unlockedCount} / {achievements.items.length} achievements unlocked
+                      {t("achievement_board.progress", {
+                        count: unlockedCount,
+                        total: achievements.items.length
+                      })}
                     </p>
                   </div>
                   <span className="rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm">
@@ -408,8 +425,8 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
                 <div className="achievement-section">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-ink">In Progress</p>
-                      <p className="text-xs text-slate-500">Focus on the next few wins.</p>
+                      <p className="text-sm font-semibold text-ink">{t("achievement_board.in_progress")}</p>
+                      <p className="text-xs text-slate-500">{t("achievement_board.in_progress_hint")}</p>
                     </div>
                     <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
                       {inProgressTracks.length}
@@ -424,14 +441,21 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <p className="text-sm font-semibold text-ink">{track.title}</p>
+                              <p className="text-sm font-semibold text-ink">
+                                {translateAchievementField(track.nextLevel ?? track.currentLevel ?? track.levels[0], "title", t, hasTranslation)}
+                              </p>
                               <p className="mt-1 text-xs text-slate-600">
-                                {track.nextLevel?.description ?? track.currentLevel?.description ?? track.description}
+                                {translateAchievementField(
+                                  track.nextLevel ?? track.currentLevel ?? track.levels[0],
+                                  "description",
+                                  t,
+                                  hasTranslation
+                                )}
                               </p>
                             </div>
                             {track.totalLevels > 1 && (
                               <span className="rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
-                                {track.currentLevel?.tier ? tierLabel(track.currentLevel.tier) : "Track"}
+                                {track.currentLevel?.tier ? tierLabel(track.currentLevel.tier) : t("achievement_board.track")}
                               </span>
                             )}
                           </div>
@@ -446,7 +470,9 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
                               {track.progress}/{track.target}
                             </span>
                             <span>
-                              {track.totalLevels > 1 ? `${track.unlockedLevels}/${track.totalLevels} tiers` : "Active"}
+                              {track.totalLevels > 1
+                                ? t("achievement_board.tiers", { count: track.unlockedLevels, total: track.totalLevels })
+                                : t("achievement_board.active")}
                             </span>
                           </div>
                         </div>
@@ -454,8 +480,8 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
                     </div>
                   ) : (
                     <div className="achievement-card achievement-card-empty">
-                      <p className="text-sm font-semibold text-ink">No active achievements</p>
-                      <p className="mt-1 text-xs text-slate-600">You have cleared the active board for now.</p>
+                      <p className="text-sm font-semibold text-ink">{t("achievement_board.no_active_title")}</p>
+                      <p className="mt-1 text-xs text-slate-600">{t("achievement_board.no_active_description")}</p>
                     </div>
                   )}
                   {inProgressTracks.length > 3 && (
@@ -464,13 +490,15 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
                       className="achievement-show-more mt-3"
                       onClick={() => setShowAllInProgress((current) => !current)}
                     >
-                      {showAllInProgress ? "Show less" : `Show more (${inProgressTracks.length - 3})`}
+                      {showAllInProgress
+                        ? t("common.show_less")
+                        : t("common.show_more", { count: inProgressTracks.length - 3 })}
                     </button>
                   )}
                 </div>
                 {completedTracks.length > 0 &&
                   renderSectionToggle({
-                    title: "Completed",
+                    title: t("achievement_board.completed"),
                     count: completedTracks.length,
                     expanded: completedExpanded,
                     onClick: () => setCompletedExpanded((current) => !current),
@@ -479,15 +507,17 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
                         {completedTracks.map((track) => (
                           <div className="achievement-card achievement-card-completed" key={track.id}>
                             <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold text-slate-700">{track.title}</p>
+                            <div>
+                                <p className="text-sm font-semibold text-slate-700">
+                                  {translateAchievementField(track.currentLevel ?? track.levels[0], "title", t, hasTranslation)}
+                                </p>
                                 <p className="mt-1 text-xs text-slate-500">
-                                  {track.currentLevel?.description ?? track.description}
+                                  {translateAchievementField(track.currentLevel ?? track.levels[0], "description", t, hasTranslation)}
                                 </p>
                               </div>
                               {track.totalLevels > 1 && (
                                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-500">
-                                  {track.currentLevel?.tier ? tierLabel(track.currentLevel.tier) : "Done"}
+                                  {track.currentLevel?.tier ? tierLabel(track.currentLevel.tier) : t("achievement_board.done")}
                                 </span>
                               )}
                             </div>
@@ -498,7 +528,7 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
                   })}
                 {secretTracks.length > 0 &&
                   renderSectionToggle({
-                    title: "Secret",
+                    title: t("achievement_board.secret"),
                     count: secretTracks.length,
                     expanded: secretExpanded,
                     onClick: () => setSecretExpanded((current) => !current),
@@ -508,8 +538,12 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
                           <div className="achievement-card achievement-card-secret" key={track.id}>
                             <div className="achievement-secret-icon">?</div>
                             <div>
-                              <p className="text-sm font-semibold text-slate-700">Secret achievement</p>
-                              <p className="mt-1 text-xs text-slate-500">Unlock it to reveal the details.</p>
+                              <p className="text-sm font-semibold text-slate-700">
+                                {t("achievement_board.secret_placeholder_title")}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {t("achievement_board.secret_placeholder_description")}
+                              </p>
                             </div>
                           </div>
                         ))}
@@ -530,6 +564,7 @@ function SwipeMealRow(props: {
   deleting: boolean;
   onDelete: (mealId: string) => Promise<void>;
 }) {
+  const { t, hasTranslation } = useI18n();
   const swipeStartXRef = useRef<number | null>(null);
   const [dragOffsetX, setDragOffsetX] = useState(0);
   const [revealed, setRevealed] = useState(false);
@@ -578,7 +613,7 @@ function SwipeMealRow(props: {
           }}
           type="button"
         >
-          {props.deleting ? "Deleting..." : "Delete"}
+          {props.deleting ? t("common.deleting") : t("common.delete")}
         </button>
       </div>
       <article
@@ -596,10 +631,10 @@ function SwipeMealRow(props: {
           <span className="text-sm font-semibold text-primary">{mealCalories} kcal</span>
         </div>
         <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">
-          {props.meal.mealType} - {formatTime(props.meal.eatenAt)}
+          {t(`meal_type.${props.meal.mealType}`)} - {formatTime(props.meal.eatenAt)}
         </p>
         <p className="mt-1 text-xs text-slate-600">
-          Б/Ж/У: {mealProtein.toFixed(1)} / {mealFat.toFixed(1)} / {mealCarbs.toFixed(1)} г
+          {t("macros.bju", { protein: mealProtein.toFixed(1), fat: mealFat.toFixed(1), carbs: mealCarbs.toFixed(1) })}
         </p>
       </article>
     </div>
@@ -619,6 +654,7 @@ function DailyLogView(props: {
   onPendingUseAsIs: () => Promise<void>;
   onPendingRecalculate: (comment: string) => Promise<void>;
 }) {
+  const { t, hasTranslation } = useI18n();
   const [draftExpanded, setDraftExpanded] = useState(false);
   const [recalculateComment, setRecalculateComment] = useState("");
   const draftResult =
@@ -631,7 +667,7 @@ function DailyLogView(props: {
 
   return (
     <section className="rounded-3xl bg-white p-5 shadow-sm">
-      <h2 className="text-lg font-semibold text-ink">Daily Log</h2>
+      <h2 className="text-lg font-semibold text-ink">{t("daily_log.title")}</h2>
       <div className="mt-4 space-y-3">
         {draftResult && (
           <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
@@ -641,32 +677,32 @@ function DailyLogView(props: {
               type="button"
             >
               <div className="flex items-center justify-between">
-                <h3 className="font-medium text-ink">AI Draft: {draftResult.dishName}</h3>
+                <h3 className="font-medium text-ink">{t("daily_log.ai_draft", { name: draftResult.dishName })}</h3>
                 <span className="text-sm font-semibold text-primary">{draftResult.calories} kcal</span>
               </div>
               <p className="mt-1 text-xs text-slate-600">
-                Tap to {draftExpanded ? "hide" : "edit"} and send recalculation comment
+                {t("daily_log.tap_to_toggle", { action: draftExpanded ? t("common.hide") : t("common.edit") })}
               </p>
             </button>
             {draftExpanded && (
               <form className="mt-3 space-y-3 rounded-lg border border-slate-200 bg-white p-3" onSubmit={submitPendingConfirm}>
                 <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
                   <p>
-                    Confidence: <span className="font-semibold">{Math.round(draftResult.confidence * 100)}%</span>
+                    {t("daily_log.confidence")} <span className="font-semibold">{Math.round(draftResult.confidence * 100)}%</span>
                   </p>
                   {draftResult.alternatives.length > 0 && (
                     <p className="mt-1">
-                      Alternatives: <span className="font-medium">{draftResult.alternatives.join(", ")}</span>
+                      {t("daily_log.alternatives")} <span className="font-medium">{draftResult.alternatives.join(", ")}</span>
                     </p>
                   )}
                 </div>
                 <div className="space-y-2 rounded-lg border border-slate-200 p-3">
                   <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Comment for recalculation
+                    {t("daily_log.recalculate_label")}
                   </label>
                   <textarea
                     className="min-h-16 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="e.g. add avocado and olive oil"
+                    placeholder={t("daily_log.recalculate_placeholder")}
                     value={recalculateComment}
                     onChange={(e) => setRecalculateComment(e.target.value)}
                   />
@@ -679,11 +715,11 @@ function DailyLogView(props: {
                     }}
                     type="button"
                   >
-                    {props.recalculatingPendingScan ? "Recalculating..." : "Recalculate by comment"}
+                    {props.recalculatingPendingScan ? t("daily_log.recalculating") : t("daily_log.recalculate_button")}
                   </button>
                 </div>
                 <label className="block text-sm text-slate-600">
-                  Title
+                  {t("common.title")}
                   <input
                     className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
                     value={props.pendingConfirmForm.title}
@@ -692,20 +728,20 @@ function DailyLogView(props: {
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="text-sm text-slate-600">
-                    Meal type
+                    {t("daily_log.meal_type")}
                     <select
                       className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
                       value={props.pendingConfirmForm.mealType}
                       onChange={(e) => props.onPendingConfirmChange({ mealType: e.target.value as MealType })}
                     >
-                      <option value="breakfast">Breakfast</option>
-                      <option value="lunch">Lunch</option>
-                      <option value="dinner">Dinner</option>
-                      <option value="snack">Snack</option>
+                      <option value="breakfast">{t("meal_type.breakfast")}</option>
+                      <option value="lunch">{t("meal_type.lunch")}</option>
+                      <option value="dinner">{t("meal_type.dinner")}</option>
+                      <option value="snack">{t("meal_type.snack")}</option>
                     </select>
                   </label>
                   <label className="text-sm text-slate-600">
-                    Time
+                    {t("common.time")}
                     <input
                       className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
                       type="datetime-local"
@@ -714,7 +750,7 @@ function DailyLogView(props: {
                     />
                   </label>
                   <label className="col-span-2 text-sm text-slate-600">
-                    Item name
+                    {t("daily_log.item_name")}
                     <input
                       className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
                       value={props.pendingConfirmForm.itemName}
@@ -722,7 +758,7 @@ function DailyLogView(props: {
                     />
                   </label>
                   <label className="text-sm text-slate-600">
-                    Calories
+                    {t("daily_log.calories")}
                     <input
                       className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
                       type="number"
@@ -731,7 +767,7 @@ function DailyLogView(props: {
                     />
                   </label>
                   <label className="text-sm text-slate-600">
-                    Protein (g)
+                    {t("daily_log.protein")}
                     <input
                       className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
                       type="number"
@@ -741,7 +777,7 @@ function DailyLogView(props: {
                     />
                   </label>
                   <label className="text-sm text-slate-600">
-                    Carbs (g)
+                    {t("daily_log.carbs")}
                     <input
                       className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
                       type="number"
@@ -751,7 +787,7 @@ function DailyLogView(props: {
                     />
                   </label>
                   <label className="text-sm text-slate-600">
-                    Fat (g)
+                    {t("daily_log.fat")}
                     <input
                       className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
                       type="number"
@@ -766,7 +802,7 @@ function DailyLogView(props: {
                   disabled={props.confirmingPendingScan}
                   type="submit"
                 >
-                  {props.confirmingPendingScan ? "Saving..." : "Confirm and add meal"}
+                  {props.confirmingPendingScan ? t("common.saving") : t("daily_log.confirm_add")}
                 </button>
                 <button
                   className="w-full rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 disabled:opacity-60"
@@ -776,13 +812,13 @@ function DailyLogView(props: {
                   }}
                   type="button"
                 >
-                  Use as is
+                  {t("daily_log.use_as_is")}
                 </button>
               </form>
             )}
           </div>
         )}
-        {props.meals.length === 0 && <p className="text-sm text-slate-500">No meals logged today.</p>}
+        {props.meals.length === 0 && <p className="text-sm text-slate-500">{t("daily_log.empty")}</p>}
         {props.meals.map((meal) => (
           <SwipeMealRow
             key={meal.id}
@@ -802,6 +838,7 @@ function OnboardingView(props: {
   onChange: (patch: Partial<OnboardingForm>) => void;
   onSubmit: () => Promise<void>;
 }) {
+  const { t, hasTranslation } = useI18n();
   async function submit(e: FormEvent) {
     e.preventDefault();
     await props.onSubmit();
@@ -809,10 +846,10 @@ function OnboardingView(props: {
 
   return (
     <form className="space-y-4 rounded-3xl bg-white p-5 shadow-sm" onSubmit={submit}>
-      <h2 className="text-lg font-semibold text-ink">Onboarding</h2>
+      <h2 className="text-lg font-semibold text-ink">{t("onboarding.title")}</h2>
       <div className="grid grid-cols-2 gap-3">
         <label className="text-sm text-slate-600">
-          Timezone
+          {t("onboarding.timezone")}
           <input
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.timezone}
@@ -820,19 +857,34 @@ function OnboardingView(props: {
           />
         </label>
         <label className="text-sm text-slate-600">
-          Goal Type
+          {t("onboarding.language")}
+          <select
+            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+            value={props.form.language}
+            onChange={(e) => props.onChange({ language: e.target.value })}
+          >
+            <option value="">{t("language.system")}</option>
+            {SUPPORTED_LOCALES.map((supportedLocale) => (
+              <option key={supportedLocale} value={supportedLocale}>
+                {hasTranslation(`language.${supportedLocale}`) ? t(`language.${supportedLocale}`) : supportedLocale.toUpperCase()}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm text-slate-600">
+          {t("onboarding.goal_type")}
           <select
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.goalType}
             onChange={(e) => props.onChange({ goalType: e.target.value as GoalType })}
           >
-            <option value="lose">Lose</option>
-            <option value="maintain">Maintain</option>
-            <option value="gain">Gain</option>
+            <option value="lose">{t("goal_type.lose")}</option>
+            <option value="maintain">{t("goal_type.maintain")}</option>
+            <option value="gain">{t("goal_type.gain")}</option>
           </select>
         </label>
         <label className="text-sm text-slate-600">
-          Height (cm)
+          {t("onboarding.height")}
           <input
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.heightCm}
@@ -841,7 +893,7 @@ function OnboardingView(props: {
           />
         </label>
         <label className="text-sm text-slate-600">
-          Weight (kg)
+          {t("onboarding.weight")}
           <input
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.weightKg}
@@ -851,10 +903,10 @@ function OnboardingView(props: {
           />
         </label>
       </div>
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Daily goals</h3>
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{t("onboarding.daily_goals")}</h3>
       <div className="grid grid-cols-2 gap-3">
         <label className="text-sm text-slate-600">
-          Calories
+          {t("onboarding.calories")}
           <input
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.calories}
@@ -863,7 +915,7 @@ function OnboardingView(props: {
           />
         </label>
         <label className="text-sm text-slate-600">
-          Protein (g)
+          {t("onboarding.protein")}
           <input
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.proteinG}
@@ -872,7 +924,7 @@ function OnboardingView(props: {
           />
         </label>
         <label className="text-sm text-slate-600">
-          Carbs (g)
+          {t("onboarding.carbs")}
           <input
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.carbsG}
@@ -881,7 +933,7 @@ function OnboardingView(props: {
           />
         </label>
         <label className="text-sm text-slate-600">
-          Fat (g)
+          {t("onboarding.fat")}
           <input
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.fatG}
@@ -895,7 +947,7 @@ function OnboardingView(props: {
         disabled={props.saving}
         type="submit"
       >
-        {props.saving ? "Saving..." : "Save onboarding"}
+        {props.saving ? t("common.saving") : t("onboarding.save")}
       </button>
     </form>
   );
@@ -907,6 +959,7 @@ function AddMealView(props: {
   onChange: (patch: Partial<MealForm>) => void;
   onSubmit: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   async function submit(e: FormEvent) {
     e.preventDefault();
     await props.onSubmit();
@@ -914,9 +967,9 @@ function AddMealView(props: {
 
   return (
     <form className="space-y-4 rounded-3xl bg-white p-5 shadow-sm" onSubmit={submit}>
-      <h2 className="text-lg font-semibold text-ink">Add Meal</h2>
+      <h2 className="text-lg font-semibold text-ink">{t("add_meal.title")}</h2>
       <label className="block text-sm text-slate-600">
-        Meal title
+        {t("add_meal.meal_title")}
         <input
           className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
           value={props.form.title}
@@ -926,20 +979,20 @@ function AddMealView(props: {
       </label>
       <div className="grid grid-cols-2 gap-3">
         <label className="text-sm text-slate-600">
-          Meal type
+          {t("add_meal.meal_type")}
           <select
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.mealType}
             onChange={(e) => props.onChange({ mealType: e.target.value as MealType })}
           >
-            <option value="breakfast">Breakfast</option>
-            <option value="lunch">Lunch</option>
-            <option value="dinner">Dinner</option>
-            <option value="snack">Snack</option>
+            <option value="breakfast">{t("meal_type.breakfast")}</option>
+            <option value="lunch">{t("meal_type.lunch")}</option>
+            <option value="dinner">{t("meal_type.dinner")}</option>
+            <option value="snack">{t("meal_type.snack")}</option>
           </select>
         </label>
         <label className="text-sm text-slate-600">
-          Time
+          {t("common.time")}
           <input
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.eatenAt}
@@ -949,10 +1002,10 @@ function AddMealView(props: {
           />
         </label>
       </div>
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Single item</h3>
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{t("add_meal.single_item")}</h3>
       <div className="grid grid-cols-2 gap-3">
         <label className="col-span-2 text-sm text-slate-600">
-          Item name
+          {t("add_meal.item_name")}
           <input
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.itemName}
@@ -961,7 +1014,7 @@ function AddMealView(props: {
           />
         </label>
         <label className="text-sm text-slate-600">
-          Calories
+          {t("add_meal.calories")}
           <input
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.calories}
@@ -971,7 +1024,7 @@ function AddMealView(props: {
           />
         </label>
         <label className="text-sm text-slate-600">
-          Protein (g)
+          {t("add_meal.protein")}
           <input
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.proteinG}
@@ -982,7 +1035,7 @@ function AddMealView(props: {
           />
         </label>
         <label className="text-sm text-slate-600">
-          Carbs (g)
+          {t("add_meal.carbs")}
           <input
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.carbsG}
@@ -993,7 +1046,7 @@ function AddMealView(props: {
           />
         </label>
         <label className="text-sm text-slate-600">
-          Fat (g)
+          {t("add_meal.fat")}
           <input
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
             value={props.form.fatG}
@@ -1009,7 +1062,7 @@ function AddMealView(props: {
         disabled={props.saving}
         type="submit"
       >
-        {props.saving ? "Saving..." : "Add meal"}
+        {props.saving ? t("common.saving") : t("add_meal.submit")}
       </button>
     </form>
   );
@@ -1030,6 +1083,7 @@ function ScannerView(props: {
   onCancel: () => void | Promise<void>;
   onFallbackToManual: () => void;
 }) {
+  const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
@@ -1065,7 +1119,7 @@ function ScannerView(props: {
     setCameraError(null);
     setCameraReady(false);
     if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError("Camera API is not available in this browser");
+      setCameraError(t("scanner.camera_unavailable"));
       return;
     }
     try {
@@ -1079,7 +1133,7 @@ function ScannerView(props: {
       streamRef.current = stream;
       setCameraOpen(true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to open camera";
+      const message = error instanceof Error ? error.message : t("scanner.open_camera_failed");
       setCameraError(message);
       setCameraOpen(false);
     }
@@ -1104,7 +1158,7 @@ function ScannerView(props: {
     const width = video.videoWidth;
     const height = video.videoHeight;
     if (!cameraReady || !width || !height) {
-      setCameraError("Camera is not ready yet");
+      setCameraError(t("scanner.camera_not_ready"));
       return;
     }
     setCameraBusy(true);
@@ -1112,17 +1166,17 @@ function ScannerView(props: {
       canvas.width = width;
       canvas.height = height;
       const context = canvas.getContext("2d");
-      if (!context) throw new Error("Failed to read camera frame");
+      if (!context) throw new Error(t("scanner.camera_frame_failed"));
       context.drawImage(video, 0, 0, width, height);
       const blob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob(resolve, "image/jpeg", 0.92);
       });
-      if (!blob) throw new Error("Failed to capture photo");
+      if (!blob) throw new Error(t("scanner.capture_failed"));
       const file = new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
       props.onPickFile(file);
       closeCamera();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to capture photo";
+      const message = error instanceof Error ? error.message : t("scanner.capture_failed");
       setCameraError(message);
     } finally {
       setCameraBusy(false);
@@ -1131,18 +1185,18 @@ function ScannerView(props: {
 
   return (
     <section className="quick-add-sheet space-y-4 rounded-[28px] bg-white p-5 shadow-sm">
-      <h2 className="text-xl font-semibold text-ink">Add with AI</h2>
+      <h2 className="text-xl font-semibold text-ink">{t("scanner.title")}</h2>
       <label className="block text-sm text-slate-600">
-        Describe food with text (optional)
+        {t("scanner.description_label")}
         <textarea
           className="mt-1 min-h-20 w-full rounded-xl border border-slate-200 px-3 py-2"
-          placeholder="E.g. Chicken salad, olive oil dressing, one slice of bread"
+          placeholder={t("scanner.description_placeholder")}
           value={props.description}
           onChange={(e) => props.onDescriptionChange(e.target.value)}
         />
       </label>
       <div className="space-y-2">
-        <p className="text-sm text-slate-600">Food photo</p>
+        <p className="text-sm text-slate-600">{t("scanner.food_photo")}</p>
         {!cameraOpen && (
           <button
             className="w-full rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700"
@@ -1151,7 +1205,7 @@ function ScannerView(props: {
             }}
             type="button"
           >
-            Open camera
+            {t("scanner.open_camera")}
           </button>
         )}
         {cameraOpen && (
@@ -1174,14 +1228,14 @@ function ScannerView(props: {
                 }}
                 type="button"
               >
-                {cameraBusy ? "Capturing..." : cameraReady ? "Take photo" : "Camera starting..."}
+                {cameraBusy ? t("scanner.capturing") : cameraReady ? t("scanner.take_photo") : t("scanner.camera_starting")}
               </button>
               <button
                 className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700"
                 onClick={closeCamera}
                 type="button"
               >
-                Close camera
+                {t("scanner.close_camera")}
               </button>
             </div>
           </div>
@@ -1198,12 +1252,12 @@ function ScannerView(props: {
           onClick={() => galleryInputRef.current?.click()}
           type="button"
         >
-          Choose from gallery
+          {t("scanner.choose_gallery")}
         </button>
-        {cameraError && <p className="text-xs text-red-600">Camera error: {cameraError}</p>}
+        {cameraError && <p className="text-xs text-red-600">{t("common.camera_error", { message: cameraError })}</p>}
         <canvas className="hidden" ref={canvasRef} />
       </div>
-      {props.fileName && <p className="text-xs text-slate-500">Selected: {props.fileName}</p>}
+      {props.fileName && <p className="text-xs text-slate-500">{t("common.selected", { name: props.fileName })}</p>}
       {props.imagePreview && (
         <img alt="Meal preview" className="h-48 w-full rounded-xl object-cover" src={props.imagePreview} />
       )}
@@ -1215,14 +1269,14 @@ function ScannerView(props: {
         }}
         type="button"
       >
-        {props.scanning ? "Scanning..." : "Analyze photo"}
+        {props.scanning ? t("scanner.scanning") : t("scanner.analyze_photo")}
       </button>
       {(props.scanning ||
         props.scanStatus?.status === "queued" ||
         props.scanStatus?.status === "processing") && (
         <div className="rounded-xl border border-slate-200 p-3">
           <div className="mb-2 flex items-center justify-between text-xs text-slate-600">
-            <span>Progress</span>
+            <span>{t("common.progress")}</span>
             <span>{props.elapsedSeconds}s</span>
           </div>
           <div className="h-2 w-full rounded bg-slate-100">
@@ -1236,32 +1290,32 @@ function ScannerView(props: {
             onClick={props.onCancel}
             type="button"
           >
-            Cancel scan
+            {t("scanner.cancel_scan")}
           </button>
         </div>
       )}
 
       {props.scanStatus && (
         <div className="rounded-xl border border-slate-200 p-3">
-          <p className="text-sm font-semibold text-ink">Status: {props.scanStatus.status}</p>
+          <p className="text-sm font-semibold text-ink">
+            {t("common.status")}: {props.scanStatus.status}
+          </p>
           {props.scanStatus.status === "queued" && (
-            <p className="mt-1 text-xs text-slate-600">Image uploaded. Waiting for model queue.</p>
+            <p className="mt-1 text-xs text-slate-600">{t("scanner.uploaded_waiting")}</p>
           )}
           {props.scanStatus.status === "processing" && (
-            <p className="mt-1 text-xs text-slate-600">Analyzing image with AI model.</p>
+            <p className="mt-1 text-xs text-slate-600">{t("scanner.processing")}</p>
           )}
           {props.scanStatus.status === "succeeded" && (
-            <p className="mt-1 text-xs text-emerald-700">
-              Scan finished. Open Daily Log to review, edit, and confirm.
-            </p>
+            <p className="mt-1 text-xs text-emerald-700">{t("scanner.succeeded")}</p>
           )}
           {props.scanStatus.status === "cancelled" && (
-            <p className="mt-1 text-xs text-slate-600">Scan canceled by user.</p>
+            <p className="mt-1 text-xs text-slate-600">{t("scanner.cancelled")}</p>
           )}
           {props.scanStatus.status === "failed" && (
             <>
               <p className="mt-1 text-xs text-red-600">
-                Error: {humanizeScanError(props.scanStatus.errorCode)}
+                {t(`errors.${humanizeScanError(props.scanStatus.errorCode)}`)}
               </p>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button
@@ -1271,14 +1325,14 @@ function ScannerView(props: {
                   }}
                   type="button"
                 >
-                  Retry scan
+                  {t("scanner.retry_scan")}
                 </button>
                 <button
                   className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-800"
                   onClick={props.onFallbackToManual}
                   type="button"
                 >
-                  Use manual form
+                  {t("scanner.manual_fallback")}
                 </button>
               </div>
             </>
@@ -1292,6 +1346,7 @@ function ScannerView(props: {
 function toOnboardingForm(profile: Profile, goals: Goals): OnboardingForm {
   return {
     timezone: profile.timezone || "UTC",
+    language: profile.language || "",
     heightCm: profile.heightCm?.toString() ?? "",
     weightKg: profile.weightKg?.toString() ?? "",
     goalType: profile.goalType ?? "maintain",
@@ -1303,6 +1358,7 @@ function toOnboardingForm(profile: Profile, goals: Goals): OnboardingForm {
 }
 
 export function App() {
+  const { t, setPreferredLocale } = useI18n();
   const initialDateTime = currentDatetimeLocal();
   const initialMealType = detectMealTypeFromLocalDatetime(initialDateTime);
   const [tab, setTab] = useState<Tab>("dashboard");
@@ -1324,6 +1380,7 @@ export function App() {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [onboardingForm, setOnboardingForm] = useState<OnboardingForm>({
     timezone: "UTC",
+    language: "",
     heightCm: "",
     weightKg: "",
     goalType: "maintain",
@@ -1406,6 +1463,7 @@ export function App() {
       }
     }
     unlockedAchievementKeysRef.current = unlockedKeys;
+    setPreferredLocale(profileData.language);
     setProfile(profileData);
     setDashboard(dashboardData);
     setMeals(mealsData.items);
@@ -1424,7 +1482,7 @@ export function App() {
         await loadAll();
       } catch (e) {
         if (!mounted) return;
-        setError(e instanceof Error ? e.message : "Unknown error");
+        setError(e instanceof Error ? e.message : t("errors.scan_missing_init"));
       } finally {
         if (mounted) setLoading(false);
       }
@@ -1442,6 +1500,7 @@ export function App() {
     try {
       await api.putProfile({
         timezone: onboardingForm.timezone.trim() || "UTC",
+        language: onboardingForm.language.trim() || null,
         heightCm: onboardingForm.heightCm ? Number(onboardingForm.heightCm) : null,
         weightKg: onboardingForm.weightKg ? Number(onboardingForm.weightKg) : null,
         goalType: onboardingForm.goalType
@@ -1453,10 +1512,10 @@ export function App() {
         fatG: Number(onboardingForm.fatG)
       });
       await loadAll();
-      setSuccess("Onboarding saved");
+      setSuccess(t("messages.onboarding_saved"));
       setTab("dashboard");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save onboarding");
+      setError(e instanceof Error ? e.message : t("errors.save_onboarding"));
     } finally {
       setSavingOnboarding(false);
     }
@@ -1493,10 +1552,10 @@ export function App() {
         carbsG: "",
         fatG: ""
       });
-      setSuccess("Meal added");
+      setSuccess(t("messages.meal_added"));
       setTab("daily-log");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add meal");
+      setError(e instanceof Error ? e.message : t("errors.save_meal"));
       setTab("daily-log");
     } finally {
       setSavingMeal(false);
@@ -1510,9 +1569,9 @@ export function App() {
     try {
       await api.deleteMeal(mealId);
       await loadAll();
-      setSuccess("Meal deleted");
+      setSuccess(t("messages.meal_deleted"));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to delete meal");
+      setError(e instanceof Error ? e.message : t("errors.delete_meal"));
     } finally {
       setDeletingMealId(null);
     }
@@ -1582,12 +1641,12 @@ export function App() {
       let attempts = 0;
       while ((status.status === "queued" || status.status === "processing") && attempts < 30) {
         if (scanCancelledRef.current) {
-          setSuccess("Scan canceled");
+          setSuccess(t("messages.scan_canceled"));
           setActiveScanId(null);
           return;
         }
         if (Date.now() - startedAt > maxDurationMs) {
-          setError("Scan timeout. Try again or use manual form.");
+          setError(t("errors.provider_timeout"));
           return;
         }
         await sleep(1200);
@@ -1612,21 +1671,21 @@ export function App() {
           carbsG: String(status.result.carbsG),
           fatG: String(status.result.fatG)
         });
-        setSuccess("AI draft is ready. Review it in Daily Log.");
+        setSuccess(t("messages.scan_draft_ready"));
         setTab("daily-log");
       }
       if (status.status === "failed") {
         setScanProgress(100);
-        setError(`Scan failed: ${status.errorCode ?? "unknown_error"}`);
+        setError(t(`errors.${humanizeScanError(status.errorCode)}`));
         setTab("daily-log");
       }
       if (status.status === "cancelled") {
         setScanProgress(100);
-        setSuccess("Scan canceled");
+        setSuccess(t("messages.scan_canceled"));
         setTab("daily-log");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Scan failed");
+      setError(e instanceof Error ? e.message : t("errors.provider_unknown_error"));
       setTab("daily-log");
     } finally {
       setScanning(false);
@@ -1672,10 +1731,10 @@ export function App() {
       });
       await loadAll();
       resetScanComposer();
-      setSuccess("Scanned meal added");
+      setSuccess(t("messages.scan_meal_added"));
       setTab("daily-log");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to confirm scan");
+      setError(e instanceof Error ? e.message : t("errors.confirm_scan"));
       setTab("daily-log");
     } finally {
       setConfirmingScan(false);
@@ -1717,10 +1776,10 @@ export function App() {
       });
       await loadAll();
       resetScanComposer();
-      setSuccess("Scanned meal added");
+      setSuccess(t("messages.scan_meal_added"));
       setTab("daily-log");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to confirm scan");
+      setError(e instanceof Error ? e.message : t("errors.confirm_scan"));
       setTab("daily-log");
     } finally {
       setConfirmingScan(false);
@@ -1746,10 +1805,10 @@ export function App() {
         }));
       }
       await loadAll();
-      setSuccess("Scan recalculated");
+      setSuccess(t("messages.scan_recalculated"));
       setTab("daily-log");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to recalculate scan");
+      setError(e instanceof Error ? e.message : t("errors.recalculate_scan"));
       setTab("daily-log");
     } finally {
       setRecalculatingScan(false);
@@ -1774,17 +1833,17 @@ export function App() {
     <div className="mx-auto min-h-screen max-w-md bg-surface px-4 pb-28 pt-6">
       <AchievementUnlockCelebration celebration={activeCelebration} />
       <header className="mb-4">
-        <p className="text-xs uppercase tracking-wide text-slate-500">Telegram Mini App</p>
-        <h1 className="text-2xl font-bold text-ink">Calorie Food</h1>
+        <p className="text-xs uppercase tracking-wide text-slate-500">{t("app.subtitle")}</p>
+        <h1 className="text-2xl font-bold text-ink">{t("app.title")}</h1>
         <p className="text-sm text-slate-500">
-          {selectedDate} {profile ? `- ${profile.timezone}` : ""}
+          {t("app.selected_date", { date: selectedDate, timezone: profile?.timezone ?? "UTC" })}
         </p>
       </header>
 
-      {loading && <p className="rounded-xl bg-white p-4 text-slate-600 shadow-sm">Loading...</p>}
+      {loading && <p className="rounded-xl bg-white p-4 text-slate-600 shadow-sm">{t("app.loading")}</p>}
       {error && (
         <p className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-700 shadow-sm">
-          Failed: {error}
+          {t("app.failed_prefix")} {error}
         </p>
       )}
       {success && (
@@ -1813,7 +1872,12 @@ export function App() {
             <OnboardingView
               form={onboardingForm}
               saving={savingOnboarding}
-              onChange={(patch) => setOnboardingForm((prev) => ({ ...prev, ...patch }))}
+              onChange={(patch) => {
+                if ("language" in patch) {
+                  setPreferredLocale(patch.language || null);
+                }
+                setOnboardingForm((prev) => ({ ...prev, ...patch }));
+              }}
               onSubmit={submitOnboarding}
             />
           )}
@@ -1853,7 +1917,7 @@ export function App() {
           onClick={() => setTab("dashboard")}
           type="button"
         >
-          Dashboard
+          {t("tabs.dashboard")}
         </button>
         <button
           className={`nav-chip px-2 py-2 text-xs font-medium ${
@@ -1862,10 +1926,10 @@ export function App() {
           onClick={() => setTab("daily-log")}
           type="button"
         >
-          Daily Log
+          {t("tabs.daily_log")}
         </button>
         <button
-          aria-label="Quick add"
+          aria-label={t("tabs.quick_add")}
           className={`quick-add-cta quick-add-cta-ring -mt-7 flex h-16 flex-col items-center justify-center rounded-full px-0 py-0 text-xs font-bold ${
             tab === "quick-add"
               ? "quick-add-cta-active text-white"
@@ -1875,7 +1939,7 @@ export function App() {
           type="button"
         >
           <span className="text-2xl leading-none">+</span>
-          <span className="text-[10px] uppercase tracking-wide">Add</span>
+          <span className="text-[10px] uppercase tracking-wide">{t("tabs.quick_add")}</span>
         </button>
         <button
           className={`nav-chip px-2 py-2 text-xs font-medium ${
@@ -1884,7 +1948,7 @@ export function App() {
           onClick={() => setTab("add-meal")}
           type="button"
         >
-          Add Meal
+          {t("tabs.add_meal")}
         </button>
         <button
           className={`nav-chip px-2 py-2 text-xs font-medium ${
@@ -1893,7 +1957,7 @@ export function App() {
           onClick={() => setTab("onboarding")}
           type="button"
         >
-          Profile
+          {t("tabs.settings")}
         </button>
       </nav>
     </div>

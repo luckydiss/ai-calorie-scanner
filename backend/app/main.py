@@ -58,6 +58,7 @@ class LogoutRequest(BaseModel):
 
 class ProfileOut(BaseModel):
     timezone: str
+    language: str | None = None
     heightCm: int | None = None
     weightKg: float | None = None
     goalType: Literal["lose", "maintain", "gain"] | None = None
@@ -65,6 +66,7 @@ class ProfileOut(BaseModel):
 
 class ProfileUpdate(BaseModel):
     timezone: str | None = None
+    language: str | None = None
     heightCm: int | None = None
     weightKg: float | None = None
     goalType: Literal["lose", "maintain", "gain"] | None = None
@@ -188,6 +190,7 @@ def parse_unsafe_telegram_init_data(init_data: str) -> dict[str, Any]:
 def row_to_profile(row: RowData) -> ProfileOut:
     return ProfileOut(
         timezone=row["timezone"],
+        language=row.get("language"),
         heightCm=row["height_cm"],
         weightKg=row["weight_kg"],
         goalType=row["goal_type"],
@@ -566,8 +569,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             user_id = str(upserted_user["id"])
             conn.execute(
                 """
-                INSERT INTO profiles(user_id, timezone, created_at, updated_at)
-                VALUES (?, 'UTC', ?, ?)
+                INSERT INTO profiles(user_id, timezone, language, created_at, updated_at)
+                VALUES (?, 'UTC', NULL, ?, ?)
                 ON CONFLICT (user_id) DO NOTHING
                 """,
                 (user_id, dt_to_str(now), dt_to_str(now)),
@@ -671,15 +674,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         goal = data.get("goalType")
         if goal and goal not in GOAL_TYPES:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid goalType")
+        language = data.get("language")
         now = dt_to_str(now_utc())
         with transaction(conn):
             conn.execute(
                 """
                 UPDATE profiles
-                SET timezone = ?, height_cm = ?, weight_kg = ?, goal_type = ?, updated_at = ?
+                SET timezone = ?, language = ?, height_cm = ?, weight_kg = ?, goal_type = ?, updated_at = ?
                 WHERE user_id = ?
                 """,
-                (data["timezone"], data["heightCm"], data["weightKg"], goal, now, user["id"]),
+                (data["timezone"], language, data["heightCm"], data["weightKg"], goal, now, user["id"]),
             )
         new_row = conn.execute("SELECT * FROM profiles WHERE user_id = ?", (user["id"],)).fetchone()
         return row_to_profile(new_row)

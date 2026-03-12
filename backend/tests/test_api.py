@@ -125,14 +125,16 @@ def test_profile_and_goals_flow() -> None:
         profile = client.get("/profile", headers=headers)
         assert profile.status_code == 200
         assert profile.json()["timezone"] == "UTC"
+        assert profile.json()["language"] is None
 
         updated = client.put(
             "/profile",
-            json={"timezone": "Europe/Moscow", "goalType": "maintain"},
+            json={"timezone": "Europe/Moscow", "language": "ru", "goalType": "maintain"},
             headers=headers,
         )
         assert updated.status_code == 200
         assert updated.json()["timezone"] == "Europe/Moscow"
+        assert updated.json()["language"] == "ru"
         assert updated.json()["goalType"] == "maintain"
 
         goal_set = client.put(
