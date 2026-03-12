@@ -391,24 +391,23 @@ body {
 }
 
 .xp-sheet-backdrop {
-  pointer-events: none;
   position: fixed;
   inset: 0;
   z-index: 55;
-  background: rgba(15, 23, 42, 0);
-  transition: background 220ms ease;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.42);
+  padding-top: 2rem;
 }
 
 .xp-sheet-backdrop-open {
-  pointer-events: auto;
   background: rgba(15, 23, 42, 0.42);
 }
 
 .xp-sheet {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: relative;
+  width: min(100%, 28rem);
   border-radius: 28px 28px 0 0;
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 -18px 48px rgba(15, 23, 42, 0.18);

@@ -436,57 +436,6 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
           />
         </div>
       </button>
-      <div
-        className={`xp-sheet-backdrop ${levelSheetOpen ? "xp-sheet-backdrop-open" : ""}`}
-        onClick={closeLevelSheet}
-        role="presentation"
-      >
-        <div
-          aria-modal="true"
-          className={`xp-sheet ${levelSheetOpen ? "xp-sheet-open" : ""}`}
-          onClick={(e) => e.stopPropagation()}
-          onTouchEnd={onLevelSheetTouchEnd}
-          onTouchMove={onLevelSheetTouchMove}
-          onTouchStart={onLevelSheetTouchStart}
-          role="dialog"
-          style={{ transform: levelSheetOpen ? `translateY(${levelSheetOffsetY}px)` : "translateY(100%)" }}
-        >
-          <div className="xp-sheet-handle" />
-          <div className="xp-sheet-content">
-            <h3 className="text-lg font-semibold text-ink">{t("progression.modal_title")}</h3>
-
-            <div className="xp-sheet-section">
-              <p className="xp-sheet-section-title">{t("progression.current_progress")}</p>
-              <p className="mt-2 text-base font-semibold text-ink">{t("progression.level_label", { level: profile.level })}</p>
-              <p className="mt-1 text-sm text-slate-600">
-                {t("progression.xp_progress", { current: profile.currentXp, required: profile.xpRequired })}
-              </p>
-              <div className="mt-3 h-3 rounded-full bg-slate-100">
-                <div
-                  className="h-3 rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500"
-                  style={{ width: `${levelProgressPercent}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="xp-sheet-section">
-              <p className="xp-sheet-section-title">{t("progression.how_to_earn")}</p>
-              <div className="mt-3 space-y-3">
-                <div className="xp-sheet-row"><span className="xp-sheet-xp">+5 XP</span><span className="xp-sheet-copy">{t("progression.earn_meal")}</span></div>
-                <div className="xp-sheet-row"><span className="xp-sheet-xp">+10 XP</span><span className="xp-sheet-copy">{t("progression.earn_day")}</span></div>
-                <div className="xp-sheet-row"><span className="xp-sheet-xp">+10 XP</span><span className="xp-sheet-copy">{t("progression.earn_streak")}</span></div>
-                <div className="xp-sheet-row"><span className="xp-sheet-xp">+20 XP</span><span className="xp-sheet-copy">{t("progression.earn_goal")}</span></div>
-              </div>
-            </div>
-
-            <div className="xp-sheet-section">
-              <p className="xp-sheet-section-title">{t("progression.next_level")}</p>
-              <p className="mt-2 text-base font-semibold text-ink">{t("progression.level_label", { level: nextLevel })}</p>
-              <p className="mt-1 text-sm text-slate-600">{t("progression.xp_required_label", { required: 100 + nextLevel * 50 })}</p>
-            </div>
-          </div>
-        </div>
-      </div>
       <div className="grid grid-cols-3 gap-3">
         <MacroBar
           label={t("macros.protein")}
@@ -707,6 +656,59 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
                       </div>
                     )
                   })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {levelSheetOpen && (
+        <div
+          className="xp-sheet-backdrop xp-sheet-backdrop-open"
+          onClick={closeLevelSheet}
+          role="presentation"
+        >
+          <div
+            aria-modal="true"
+            className="xp-sheet xp-sheet-open"
+            onClick={(e) => e.stopPropagation()}
+            onTouchEnd={onLevelSheetTouchEnd}
+            onTouchMove={onLevelSheetTouchMove}
+            onTouchStart={onLevelSheetTouchStart}
+            role="dialog"
+            style={{ transform: `translateY(${levelSheetOffsetY}px)` }}
+          >
+            <div className="xp-sheet-handle" />
+            <div className="xp-sheet-content">
+              <h3 className="text-lg font-semibold text-ink">{t("progression.modal_title")}</h3>
+
+              <div className="xp-sheet-section">
+                <p className="xp-sheet-section-title">{t("progression.current_progress")}</p>
+                <p className="mt-2 text-base font-semibold text-ink">{t("progression.level_label", { level: profile.level })}</p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {t("progression.xp_progress", { current: profile.currentXp, required: profile.xpRequired })}
+                </p>
+                <div className="mt-3 h-3 rounded-full bg-slate-100">
+                  <div
+                    className="h-3 rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500"
+                    style={{ width: `${levelProgressPercent}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="xp-sheet-section">
+                <p className="xp-sheet-section-title">{t("progression.how_to_earn")}</p>
+                <div className="mt-3 space-y-3">
+                  <div className="xp-sheet-row"><span className="xp-sheet-xp">+5 XP</span><span className="xp-sheet-copy">{t("progression.earn_meal")}</span></div>
+                  <div className="xp-sheet-row"><span className="xp-sheet-xp">+10 XP</span><span className="xp-sheet-copy">{t("progression.earn_day")}</span></div>
+                  <div className="xp-sheet-row"><span className="xp-sheet-xp">+10 XP</span><span className="xp-sheet-copy">{t("progression.earn_streak")}</span></div>
+                  <div className="xp-sheet-row"><span className="xp-sheet-xp">+20 XP</span><span className="xp-sheet-copy">{t("progression.earn_goal")}</span></div>
+                </div>
+              </div>
+
+              <div className="xp-sheet-section">
+                <p className="xp-sheet-section-title">{t("progression.next_level")}</p>
+                <p className="mt-2 text-base font-semibold text-ink">{t("progression.level_label", { level: nextLevel })}</p>
+                <p className="mt-1 text-sm text-slate-600">{t("progression.xp_required_label", { required: 100 + nextLevel * 50 })}</p>
               </div>
             </div>
           </div>
