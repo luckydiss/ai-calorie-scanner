@@ -41,6 +41,27 @@ export type Dashboard = {
   recentMeals: Meal[];
 };
 
+export type Streak = {
+  currentDays: number;
+  longestDays: number;
+  lastLoggedDay: string | null;
+};
+
+export type Achievement = {
+  key: string;
+  title: string;
+  description: string;
+  progress: number;
+  target: number;
+  unlocked: boolean;
+  unlockedAt: string | null;
+};
+
+export type AchievementsResponse = {
+  streak: Streak;
+  items: Achievement[];
+};
+
 export type ScanJob = {
   id: string;
   status: "queued" | "processing" | "succeeded" | "failed" | "cancelled";
@@ -136,6 +157,7 @@ export const api = {
       body: JSON.stringify(payload)
     }),
   getDashboard: (date: string) => request<Dashboard>(`/dashboard?date=${date}`),
+  getAchievements: () => request<AchievementsResponse>("/achievements"),
   getMeals: (date: string) => request<{ items: Meal[] }>(`/meals?date=${date}`),
   createMeal: (payload: {
     title: string;

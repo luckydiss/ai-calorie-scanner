@@ -150,6 +150,101 @@ class ScanRecalculateRequest(BaseModel):
     comment: str = Field(min_length=1, max_length=800)
 
 
+class StreakOut(BaseModel):
+    currentDays: int
+    longestDays: int
+    lastLoggedDay: date | None = None
+
+
+class AchievementOut(BaseModel):
+    key: str
+    title: str
+    description: str
+    progress: int = Field(ge=0)
+    target: int = Field(ge=1)
+    unlocked: bool
+    unlockedAt: datetime | None = None
+
+
+class AchievementsResponse(BaseModel):
+    streak: StreakOut
+    items: list[AchievementOut]
+
+
+ACHIEVEMENT_DEFINITIONS: list[dict[str, Any]] = [
+    {
+        "key": "first_bite",
+        "title": "First Bite",
+        "description": "Log your first meal",
+        "metric": "total_meals",
+        "target": 1,
+    },
+    {
+        "key": "meal_starter_5",
+        "title": "Meal Starter",
+        "description": "Log 5 meals total",
+        "metric": "total_meals",
+        "target": 5,
+    },
+    {
+        "key": "meal_habit_10",
+        "title": "Meal Habit",
+        "description": "Log 10 meals total",
+        "metric": "total_meals",
+        "target": 10,
+    },
+    {
+        "key": "power_day_3",
+        "title": "Power Day",
+        "description": "Log 3 meals in one day",
+        "metric": "max_meals_day",
+        "target": 3,
+    },
+    {
+        "key": "ai_explorer_3",
+        "title": "AI Explorer",
+        "description": "Confirm 3 AI-based meals",
+        "metric": "ai_meals",
+        "target": 3,
+    },
+    {
+        "key": "protein_keeper_3",
+        "title": "Protein Keeper",
+        "description": "Hit protein goal on 3 different days",
+        "metric": "protein_goal_days",
+        "target": 3,
+    },
+    {
+        "key": "calorie_rhythm_5",
+        "title": "Calorie Rhythm",
+        "description": "Stay within 10% of calorie goal for 5 days",
+        "metric": "calorie_range_days",
+        "target": 5,
+    },
+    {
+        "key": "streak_3",
+        "title": "3-Day Streak",
+        "description": "Log meals 3 days in a row",
+        "metric": "current_streak_days",
+        "target": 3,
+    },
+    {
+        "key": "streak_7",
+        "title": "7-Day Streak",
+        "description": "Log meals 7 days in a row",
+        "metric": "current_streak_days",
+        "target": 7,
+    },
+    {
+        "key": "streak_14",
+        "title": "14-Day Streak",
+        "description": "Log meals 14 days in a row",
+        "metric": "current_streak_days",
+        "target": 14,
+    },
+]
+
+
 def now_utc() -> datetime:
     return datetime.now(tz=UTC)
 
@@ -278,6 +373,205 @@ def map_scan_error_code(exc: Exception) -> str:
     if isinstance(exc, httpx.ConnectError):
         return "provider_connect_error"
     return "provider_unknown_error"
+
+
+def ensure_achievement_catalog(conn: DBConnection) -> None:
+    for definition in ACHIEVEMENT_DEFINITIONS:
+        conn.execute(
+            """
+            INSERT INTO achievements(id, key, title, description, rule_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (key) DO UPDATE
+            SET title = EXCLUDED.title,
+                description = EXCLUDED.description,
+                rule_json = EXCLUDED.rule_json
+            """,
+            (
+                str(uuid.uuid4()),
+                definition["key"],
+                definition["title"],
+                definition["description"],
+                json.dumps({"metric": definition["metric"], "target": definition["target"]}),
+                dt_to_str(now_utc()),
+            ),
+        )
+
+
+def compute_streak(days_desc: list[date]) -> tuple[int, int]:
+    if not days_desc:
+        return 0, 0
+    sorted_days = sorted(set(days_desc), reverse=True)
+    current = 1
+    for idx in range(1, len(sorted_days)):
+        if (sorted_days[idx - 1] - sorted_days[idx]).days == 1:
+            current += 1
+        else:
+            break
+    longest = 1
+    run = 1
+    for idx in range(1, len(sorted_days)):
+        if (sorted_days[idx - 1] - sorted_days[idx]).days == 1:
+            run += 1
+            longest = max(longest, run)
+        else:
+            run = 1
+    return current, longest
+
+
+def build_achievement_state(conn: DBConnection, user_id: str) -> tuple[dict[str, int], StreakOut]:
+    total_meals_row = conn.execute(
+        "SELECT COUNT(*)::int AS cnt FROM meals WHERE user_id = ?",
+        (user_id,),
+    ).fetchone()
+    ai_meals_row = conn.execute(
+        "SELECT COUNT(*)::int AS cnt FROM meals WHERE user_id = ? AND source = 'ai'",
+        (user_id,),
+    ).fetchone()
+    per_day_rows = conn.execute(
+        """
+        SELECT DATE(eaten_at) AS day, COUNT(*)::int AS meal_count
+        FROM meals
+        WHERE user_id = ?
+        GROUP BY DATE(eaten_at)
+        ORDER BY day DESC
+        """,
+        (user_id,),
+    ).fetchall()
+    max_meals_day = max([int(row["meal_count"]) for row in per_day_rows], default=0)
+    meal_days = [date.fromisoformat(str(row["day"])) for row in per_day_rows]
+    current_streak_days, longest_streak_days = compute_streak(meal_days)
+    last_logged_day = meal_days[0] if meal_days else None
+
+    with transaction(conn):
+        conn.execute(
+            """
+            INSERT INTO streaks(user_id, current_streak_days, longest_streak_days, last_logged_day, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (user_id) DO UPDATE
+            SET current_streak_days = EXCLUDED.current_streak_days,
+                longest_streak_days = EXCLUDED.longest_streak_days,
+                last_logged_day = EXCLUDED.last_logged_day,
+                updated_at = EXCLUDED.updated_at
+            """,
+            (
+                user_id,
+                current_streak_days,
+                longest_streak_days,
+                last_logged_day.isoformat() if last_logged_day else None,
+                dt_to_str(now_utc()),
+            ),
+        )
+
+    daily_rows = conn.execute(
+        """
+        SELECT
+          DATE(m.eaten_at) AS day,
+          COALESCE(SUM(mi.calories), 0) AS calories,
+          COALESCE(SUM(mi.protein_g), 0) AS protein_g,
+          (
+            SELECT dg.calories
+            FROM daily_goals dg
+            WHERE dg.user_id = ? AND dg.effective_from <= DATE(m.eaten_at)
+            ORDER BY dg.effective_from DESC
+            LIMIT 1
+          ) AS goal_calories,
+          (
+            SELECT dg.protein_g
+            FROM daily_goals dg
+            WHERE dg.user_id = ? AND dg.effective_from <= DATE(m.eaten_at)
+            ORDER BY dg.effective_from DESC
+            LIMIT 1
+          ) AS goal_protein
+        FROM meals m
+        JOIN meal_items mi ON mi.meal_id = m.id
+        WHERE m.user_id = ?
+        GROUP BY DATE(m.eaten_at)
+        ORDER BY day DESC
+        """,
+        (user_id, user_id, user_id),
+    ).fetchall()
+    protein_goal_days = 0
+    calorie_range_days = 0
+    for row in daily_rows:
+        goal_protein = row["goal_protein"]
+        goal_calories = row["goal_calories"]
+        protein = float(row["protein_g"])
+        calories = float(row["calories"])
+        if goal_protein is not None and protein >= float(goal_protein):
+            protein_goal_days += 1
+        if goal_calories is not None:
+            target = float(goal_calories)
+            if target > 0 and (target * 0.9) <= calories <= (target * 1.1):
+                calorie_range_days += 1
+
+    metrics = {
+        "total_meals": int(total_meals_row["cnt"] if total_meals_row else 0),
+        "ai_meals": int(ai_meals_row["cnt"] if ai_meals_row else 0),
+        "max_meals_day": int(max_meals_day),
+        "current_streak_days": int(current_streak_days),
+        "protein_goal_days": int(protein_goal_days),
+        "calorie_range_days": int(calorie_range_days),
+    }
+    return metrics, StreakOut(
+        currentDays=current_streak_days,
+        longestDays=longest_streak_days,
+        lastLoggedDay=last_logged_day,
+    )
+
+
+def evaluate_and_unlock_achievements(conn: DBConnection, user_id: str) -> AchievementsResponse:
+    ensure_achievement_catalog(conn)
+    metrics, streak = build_achievement_state(conn, user_id)
+
+    catalog_rows = conn.execute(
+        "SELECT id, key, title, description FROM achievements",
+    ).fetchall()
+    by_key = {row["key"]: row for row in catalog_rows}
+
+    with transaction(conn):
+        for definition in ACHIEVEMENT_DEFINITIONS:
+            key = definition["key"]
+            target = int(definition["target"])
+            progress = int(metrics.get(definition["metric"], 0))
+            if progress >= target and key in by_key:
+                conn.execute(
+                    """
+                    INSERT INTO user_achievements(id, user_id, achievement_id, unlocked_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT (user_id, achievement_id) DO NOTHING
+                    """,
+                    (str(uuid.uuid4()), user_id, by_key[key]["id"], dt_to_str(now_utc())),
+                )
+
+    unlocked_rows = conn.execute(
+        """
+        SELECT a.key, ua.unlocked_at
+        FROM user_achievements ua
+        JOIN achievements a ON a.id = ua.achievement_id
+        WHERE ua.user_id = ?
+        """,
+        (user_id,),
+    ).fetchall()
+    unlocked_by_key = {row["key"]: str_to_dt(row["unlocked_at"]) for row in unlocked_rows}
+
+    items: list[AchievementOut] = []
+    for definition in ACHIEVEMENT_DEFINITIONS:
+        key = definition["key"]
+        progress = int(metrics.get(definition["metric"], 0))
+        target = int(definition["target"])
+        row = by_key.get(key)
+        items.append(
+            AchievementOut(
+                key=key,
+                title=row["title"] if row else definition["title"],
+                description=row["description"] if row else definition["description"],
+                progress=min(progress, target),
+                target=target,
+                unlocked=key in unlocked_by_key,
+                unlockedAt=unlocked_by_key.get(key),
+            )
+        )
+    return AchievementsResponse(streak=streak, items=items)
 
 
 def configure_logging(settings: Settings) -> None:
@@ -788,6 +1082,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         item.confidence,
                     ),
                 )
+        _ = evaluate_and_unlock_achievements(conn, user["id"])
         row = conn.execute("SELECT * FROM meals WHERE id = ?", (meal_id,)).fetchone()
         return row_to_meal(conn, row)
 
@@ -907,6 +1202,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             goals=goals,
             recentMeals=[row_to_meal(conn, row) for row in recent_rows],
         )
+
+    @app.get("/achievements", response_model=AchievementsResponse)
+    def get_achievements(
+        user: RowData = Depends(get_current_user),
+        conn: DBConnection = Depends(get_conn),
+    ) -> AchievementsResponse:
+        return evaluate_and_unlock_achievements(conn, user["id"])
 
     @app.post("/scans", response_model=ScanJobOut, status_code=status.HTTP_202_ACCEPTED)
     async def create_scan(
@@ -1084,6 +1386,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "UPDATE scan_jobs SET confirmed_at = ?, updated_at = ? WHERE id = ?",
                 (now, now, scan_id),
             )
+        _ = evaluate_and_unlock_achievements(conn, user["id"])
 
         row = conn.execute("SELECT * FROM meals WHERE id = ?", (meal_id,)).fetchone()
         return row_to_meal(conn, row)
