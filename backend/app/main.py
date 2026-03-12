@@ -464,29 +464,36 @@ def build_achievement_state(conn: DBConnection, user_id: str) -> tuple[dict[str,
 
     daily_rows = conn.execute(
         """
+        WITH daily AS (
+          SELECT
+            DATE(m.eaten_at) AS day,
+            COALESCE(SUM(mi.calories), 0) AS calories,
+            COALESCE(SUM(mi.protein_g), 0) AS protein_g
+          FROM meals m
+          JOIN meal_items mi ON mi.meal_id = m.id
+          WHERE m.user_id = ?
+          GROUP BY DATE(m.eaten_at)
+        )
         SELECT
-          DATE(m.eaten_at) AS day,
-          COALESCE(SUM(mi.calories), 0) AS calories,
-          COALESCE(SUM(mi.protein_g), 0) AS protein_g,
+          d.day,
+          d.calories,
+          d.protein_g,
           (
             SELECT dg.calories
             FROM daily_goals dg
-            WHERE dg.user_id = ? AND dg.effective_from <= DATE(m.eaten_at)
+            WHERE dg.user_id = ? AND dg.effective_from <= d.day
             ORDER BY dg.effective_from DESC
             LIMIT 1
           ) AS goal_calories,
           (
             SELECT dg.protein_g
             FROM daily_goals dg
-            WHERE dg.user_id = ? AND dg.effective_from <= DATE(m.eaten_at)
+            WHERE dg.user_id = ? AND dg.effective_from <= d.day
             ORDER BY dg.effective_from DESC
             LIMIT 1
           ) AS goal_protein
-        FROM meals m
-        JOIN meal_items mi ON mi.meal_id = m.id
-        WHERE m.user_id = ?
-        GROUP BY DATE(m.eaten_at)
-        ORDER BY day DESC
+        FROM daily d
+        ORDER BY d.day DESC
         """,
         (user_id, user_id, user_id),
     ).fetchall()
