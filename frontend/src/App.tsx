@@ -192,7 +192,7 @@ function createCelebrationParticles(): CelebrationParticle[] {
       endY,
       rotation: -160 + Math.random() * 320,
       delay: Math.round(Math.random() * 90),
-      duration: 900 + Math.round(Math.random() * 220),
+      duration: 1500 + Math.round(Math.random() * 320),
       rounded: Math.random() > 0.45
     };
   });
@@ -1382,7 +1382,7 @@ export function App() {
     if (!activeCelebration) return;
     const timeoutId = window.setTimeout(() => {
       setActiveCelebration(null);
-    }, 1200);
+    }, 2400);
     return () => {
       window.clearTimeout(timeoutId);
     };

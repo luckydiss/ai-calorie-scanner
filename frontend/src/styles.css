@@ -281,7 +281,7 @@ body {
   border-radius: 2px;
   opacity: 0;
   transform: translateX(-50%) translateY(0) rotate(0deg);
-  animation: achievement-burst var(--particle-duration) ease-out var(--particle-delay) forwards;
+  animation: achievement-burst var(--particle-duration) cubic-bezier(0.18, 0.72, 0.22, 1) var(--particle-delay) forwards;
 }
 
 .achievement-particle-round {
@@ -303,7 +303,7 @@ body {
   padding: 1rem 1rem 0.95rem;
   text-align: center;
   opacity: 0;
-  animation: achievement-toast 1180ms ease-out forwards;
+  animation: achievement-toast 2200ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
   backdrop-filter: blur(10px);
 }
 
@@ -324,10 +324,10 @@ body {
     opacity: 0;
     transform: translateX(-50%) translateY(0) rotate(0deg) scale(0.8);
   }
-  10% {
+  8% {
     opacity: 1;
   }
-  55% {
+  48% {
     opacity: 1;
     transform:
       translateX(calc(-50% + var(--particle-x)))
@@ -335,13 +335,16 @@ body {
       rotate(calc(var(--particle-rotation) * 0.72))
       scale(1);
   }
+  76% {
+    opacity: 0.72;
+  }
   100% {
     opacity: 0;
     transform:
       translateX(calc(-50% + var(--particle-x)))
       translateY(var(--particle-end-y))
       rotate(var(--particle-rotation))
-      scale(0.92);
+      scale(0.82);
   }
 }
 
@@ -350,16 +353,20 @@ body {
     opacity: 0;
     transform: translate(-50%, calc(-50% + 16px)) scale(0.94);
   }
-  14% {
+  12% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
-  78% {
+  74% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
+  }
+  90% {
+    opacity: 0.42;
+    transform: translate(-50%, calc(-50% - 4px)) scale(0.995);
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, calc(-50% - 10px)) scale(0.98);
+    transform: translate(-50%, calc(-50% - 12px)) scale(0.985);
   }
 }
