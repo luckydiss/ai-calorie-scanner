@@ -413,6 +413,26 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
           <div className="h-3 rounded-full bg-primary" style={{ width: `${kcalPercent}%` }} />
         </div>
       </div>
+      <div className="grid grid-cols-3 gap-3">
+        <MacroBar
+          label={t("macros.protein")}
+          value={dashboard.totals.proteinG}
+          goal={dashboard.goals.proteinG}
+          color="bg-emerald-500"
+        />
+        <MacroBar
+          label={t("macros.carbs")}
+          value={dashboard.totals.carbsG}
+          goal={dashboard.goals.carbsG}
+          color="bg-amber-500"
+        />
+        <MacroBar
+          label={t("macros.fat")}
+          value={dashboard.totals.fatG}
+          goal={dashboard.goals.fatG}
+          color="bg-blue-500"
+        />
+      </div>
       <button
         type="button"
         className="level-card w-full rounded-3xl bg-white p-5 text-left shadow-sm"
@@ -436,26 +456,6 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
           />
         </div>
       </button>
-      <div className="grid grid-cols-3 gap-3">
-        <MacroBar
-          label={t("macros.protein")}
-          value={dashboard.totals.proteinG}
-          goal={dashboard.goals.proteinG}
-          color="bg-emerald-500"
-        />
-        <MacroBar
-          label={t("macros.carbs")}
-          value={dashboard.totals.carbsG}
-          goal={dashboard.goals.carbsG}
-          color="bg-amber-500"
-        />
-        <MacroBar
-          label={t("macros.fat")}
-          value={dashboard.totals.fatG}
-          goal={dashboard.goals.fatG}
-          color="bg-blue-500"
-        />
-      </div>
       {achievements && (
         <div className="achievement-board rounded-3xl p-5 shadow-sm">
           <button
