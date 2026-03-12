@@ -1,4 +1,4 @@
-import { FormEvent, TouchEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, TouchEvent, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   api,
   type Achievement,
@@ -58,6 +58,12 @@ type AchievementTrack = {
   unlockedLevels: number;
   currentLevel: Achievement | null;
   nextLevel: Achievement | null;
+  levels: Achievement[];
+  progress: number;
+  target: number;
+  isCompleted: boolean;
+  isSecret: boolean;
+  latestUnlockedAt: string | null;
 };
 
 function formatTime(iso: string): string {
@@ -121,6 +127,13 @@ function buildAchievementTracks(items: Achievement[]): AchievementTrack[] {
     const currentLevel = [...levels].reverse().find((item) => item.unlocked) ?? null;
     const nextLevel = levels.find((item) => !item.unlocked) ?? null;
     const representative = currentLevel ?? levels[0];
+    const latestUnlockedAt =
+      [...levels]
+        .filter((item) => item.unlockedAt)
+        .sort((a, b) => new Date(b.unlockedAt ?? 0).getTime() - new Date(a.unlockedAt ?? 0).getTime())[0]
+        ?.unlockedAt ?? null;
+    const progress = nextLevel ? nextLevel.progress : currentLevel?.target ?? representative.target;
+    const target = nextLevel?.target ?? currentLevel?.target ?? representative.target;
     return {
       id: groupKey,
       title: representative.title,
@@ -130,8 +143,50 @@ function buildAchievementTracks(items: Achievement[]): AchievementTrack[] {
       unlockedLevels,
       currentLevel,
       nextLevel,
+      levels,
+      progress,
+      target,
+      isCompleted: nextLevel === null,
+      isSecret: representative.hidden && !currentLevel,
+      latestUnlockedAt,
     };
   });
+}
+
+function achievementProgressPercent(track: AchievementTrack): number {
+  if (track.target <= 0) return 0;
+  return Math.min(100, Math.round((track.progress / track.target) * 100));
+}
+
+function renderSectionToggle(props: {
+  title: string;
+  count: number;
+  expanded: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="achievement-section">
+      <button
+        type="button"
+        className="achievement-section-toggle"
+        aria-expanded={props.expanded}
+        onClick={props.onClick}
+      >
+        <span className="text-sm font-semibold text-ink">
+          {props.title} ({props.count})
+        </span>
+        <span className={`achievement-section-arrow ${props.expanded ? "achievement-section-arrow-open" : ""}`}>
+          <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-current">
+            <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.18l3.71-3.95a.75.75 0 1 1 1.1 1.02l-4.25 4.53a.75.75 0 0 1-1.1 0L5.21 8.27a.75.75 0 0 1 .02-1.06Z" />
+          </svg>
+        </span>
+      </button>
+      <div className={`achievement-section-panel ${props.expanded ? "achievement-section-panel-open" : ""}`}>
+        <div className="pt-3">{props.children}</div>
+      </div>
+    </div>
+  );
 }
 
 function MacroBar(props: { label: string; value: number; goal: number; color: string }) {
@@ -152,18 +207,34 @@ function MacroBar(props: { label: string; value: number; goal: number; color: st
 
 function DashboardView(props: { dashboard: Dashboard; achievements: AchievementsResponse | null }) {
   const { dashboard, achievements } = props;
-  const [achievementsExpanded, setAchievementsExpanded] = useState(false);
+  const [showAllInProgress, setShowAllInProgress] = useState(false);
+  const [completedExpanded, setCompletedExpanded] = useState(false);
+  const [secretExpanded, setSecretExpanded] = useState(false);
   const kcalPercent =
     dashboard.goals.calories > 0
       ? Math.min(100, Math.round((dashboard.totals.calories / dashboard.goals.calories) * 100))
       : 0;
   const unlockedCount = achievements ? achievements.items.filter((item) => item.unlocked).length : 0;
   const tracks = achievements ? buildAchievementTracks(achievements.items) : [];
-  const nextLocked = tracks.find((track) => track.nextLevel) ?? null;
   const latestUnlocked =
     achievements?.items
       .filter((item) => item.unlocked && item.unlockedAt)
       .sort((a, b) => new Date(b.unlockedAt ?? 0).getTime() - new Date(a.unlockedAt ?? 0).getTime())[0] ?? null;
+  const inProgressTracks = [...tracks]
+    .filter((track) => !track.isSecret && !track.isCompleted)
+    .sort((a, b) => {
+      const startedDiff = Number(b.progress > 0) - Number(a.progress > 0);
+      if (startedDiff !== 0) return startedDiff;
+      const ratioDiff = achievementProgressPercent(b) - achievementProgressPercent(a);
+      if (ratioDiff !== 0) return ratioDiff;
+      return b.unlockedLevels - a.unlockedLevels;
+    });
+  const completedTracks = [...tracks]
+    .filter((track) => track.isCompleted && !track.isSecret)
+    .sort((a, b) => new Date(b.latestUnlockedAt ?? 0).getTime() - new Date(a.latestUnlockedAt ?? 0).getTime());
+  const secretTracks = [...tracks].filter((track) => track.isSecret);
+  const visibleInProgressTracks = showAllInProgress ? inProgressTracks : inProgressTracks.slice(0, 3);
+  const summaryPercent = achievements ? Math.round((unlockedCount / Math.max(achievements.items.length, 1)) * 100) : 0;
 
   return (
     <section className="space-y-4">
@@ -197,134 +268,142 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
       </div>
       {achievements && (
         <div className="achievement-board rounded-3xl p-5 shadow-sm">
-          <button
-            type="button"
-            className="achievement-board-toggle w-full text-left"
-            aria-expanded={achievementsExpanded}
-            onClick={() => setAchievementsExpanded((current) => !current)}
-          >
-            <div className="achievement-board-preview min-h-[132px]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-ink">Achievement Board</h2>
-                  <p className="text-sm text-slate-600">
-                    Streak: {achievements.streak.currentDays} days (best {achievements.streak.longestDays})
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
-                    {unlockedCount}/{achievements.items.length}
-                  </span>
-                  <span
-                    className={`achievement-board-arrow flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-slate-600 ${
-                      achievementsExpanded ? "achievement-board-arrow-open" : ""
-                    }`}
-                  >
-                    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-current">
-                      <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.18l3.71-3.95a.75.75 0 1 1 1.1 1.02l-4.25 4.53a.75.75 0 0 1-1.1 0L5.21 8.27a.75.75 0 0 1 .02-1.06Z" />
-                    </svg>
-                  </span>
-                </div>
+          <div className="achievement-board-header">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-ink">Achievement Board</h2>
+                <p className="mt-1 text-sm font-medium text-slate-700">
+                  {unlockedCount} / {achievements.items.length} achievements unlocked
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Streak {achievements.streak.currentDays} days • Best {achievements.streak.longestDays} days
+                </p>
               </div>
-              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Latest unlock</p>
-                {latestUnlocked ? (
-                  <>
-                    <p className="mt-1 text-sm font-semibold text-ink">{latestUnlocked.title}</p>
-                    <p className="text-xs text-slate-600">{latestUnlocked.description}</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="mt-1 text-sm font-semibold text-ink">No unlock yet</p>
-                    <p className="text-xs text-slate-600">Log your next meal to start the board.</p>
-                  </>
-                )}
-              </div>
+              <span className="rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm">
+                {summaryPercent}%
+              </span>
             </div>
-          </button>
-          <div className={`achievement-board-details ${achievementsExpanded ? "achievement-board-details-open" : ""}`}>
-            <div className="pt-4">
-              {nextLocked && (
-                <div className="rounded-2xl border border-sky-200 bg-white/80 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">Next reward</p>
-                  <p className="mt-1 text-sm font-semibold text-ink">
-                    {nextLocked.hidden ? "Hidden achievement" : nextLocked.title}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {nextLocked.hidden
-                      ? "Keep logging in different ways to reveal this secret."
-                      : nextLocked.nextLevel?.description ?? nextLocked.description}
-                  </p>
-                  <div className="mt-2 h-2 rounded bg-slate-100">
+            <div className="mt-3 h-2.5 rounded-full bg-white/75">
+              <div className="h-2.5 rounded-full bg-primary" style={{ width: `${summaryPercent}%` }} />
+            </div>
+            {latestUnlocked && (
+              <p className="mt-3 text-xs text-slate-600">
+                Latest unlock: <span className="font-semibold text-ink">{latestUnlocked.title}</span>
+              </p>
+            )}
+          </div>
+          <div className="mt-5">
+            <div className="achievement-section">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-ink">In Progress</p>
+                  <p className="text-xs text-slate-500">Focus on the next few wins.</p>
+                </div>
+                <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
+                  {inProgressTracks.length}
+                </span>
+              </div>
+              {visibleInProgressTracks.length > 0 ? (
+                <div className="space-y-3">
+                  {visibleInProgressTracks.map((track, index) => (
                     <div
-                      className="h-2 rounded bg-primary"
-                      style={{
-                        width: `${Math.min(
-                          100,
-                          Math.round(
-                            (((nextLocked.nextLevel?.progress ?? 0) || 0) /
-                              ((nextLocked.nextLevel?.target ?? 1) || 1)) *
-                              100
-                          )
-                        )}%`
-                      }}
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-slate-600">
-                    {nextLocked.nextLevel?.progress ?? 0}/{nextLocked.nextLevel?.target ?? 1}
-                  </p>
+                      className={`achievement-card achievement-card-progress ${index === 0 ? "achievement-card-progress-featured" : ""}`}
+                      key={track.id}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-ink">{track.title}</p>
+                          <p className="mt-1 text-xs text-slate-600">
+                            {track.nextLevel?.description ?? track.currentLevel?.description ?? track.description}
+                          </p>
+                        </div>
+                        {track.totalLevels > 1 && (
+                          <span className="rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+                            {track.currentLevel?.tier ? tierLabel(track.currentLevel.tier) : "Track"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-4 h-2.5 rounded-full bg-white/80">
+                        <div
+                          className="h-2.5 rounded-full bg-primary"
+                          style={{ width: `${achievementProgressPercent(track)}%` }}
+                        />
+                      </div>
+                      <div className="mt-3 flex items-center justify-between text-[11px] text-slate-600">
+                        <span>
+                          {track.progress}/{track.target}
+                        </span>
+                        <span>
+                          {track.totalLevels > 1 ? `${track.unlockedLevels}/${track.totalLevels} tiers` : "Active"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="achievement-card achievement-card-empty">
+                  <p className="text-sm font-semibold text-ink">No active achievements</p>
+                  <p className="mt-1 text-xs text-slate-600">You have cleared the active board for now.</p>
                 </div>
               )}
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                {tracks.map((track) => (
-                  <div
-                    className={`rounded-2xl border p-3 ${
-                      track.currentLevel ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white/85"
-                    }`}
-                    key={track.id}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-xs font-semibold text-ink">{track.hidden ? "?" : track.title}</p>
-                        <p className="text-[11px] text-slate-600">
-                          {track.hidden
-                            ? "Secret reward"
-                            : track.nextLevel?.description ?? track.currentLevel?.description ?? track.description}
-                        </p>
-                      </div>
-                      {track.totalLevels > 1 && (
-                        <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">
-                          {track.currentLevel?.tier ? tierLabel(track.currentLevel.tier) : "Track"}
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-3 h-2 rounded bg-slate-100">
-                      <div
-                        className={`h-2 rounded ${track.currentLevel ? "bg-emerald-500" : "bg-primary"}`}
-                        style={{
-                          width: `${Math.min(
-                            100,
-                            Math.round(
-                              (((track.nextLevel?.progress ?? track.currentLevel?.target ?? 0) || 0) /
-                                ((track.nextLevel?.target ?? track.currentLevel?.target ?? 1) || 1)) *
-                                100
-                            )
-                          )}%`
-                        }}
-                      />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-[11px] text-slate-600">
-                      <span>
-                        {track.nextLevel
-                          ? `${track.nextLevel.progress}/${track.nextLevel.target}`
-                          : `${track.unlockedLevels}/${track.totalLevels} complete`}
-                      </span>
-                      {track.totalLevels > 1 && <span>{track.unlockedLevels}/{track.totalLevels} tiers</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {inProgressTracks.length > 3 && (
+                <button
+                  type="button"
+                  className="achievement-show-more mt-3"
+                  onClick={() => setShowAllInProgress((current) => !current)}
+                >
+                  {showAllInProgress ? "Show less" : `Show more (${inProgressTracks.length - 3})`}
+                </button>
+              )}
             </div>
+            {completedTracks.length > 0 &&
+              renderSectionToggle({
+                title: "Completed",
+                count: completedTracks.length,
+                expanded: completedExpanded,
+                onClick: () => setCompletedExpanded((current) => !current),
+                children: (
+                  <div className="space-y-3">
+                    {completedTracks.map((track) => (
+                      <div className="achievement-card achievement-card-completed" key={track.id}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-700">{track.title}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {track.currentLevel?.description ?? track.description}
+                            </p>
+                          </div>
+                          {track.totalLevels > 1 && (
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-500">
+                              {track.currentLevel?.tier ? tierLabel(track.currentLevel.tier) : "Done"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
+            {secretTracks.length > 0 &&
+              renderSectionToggle({
+                title: "Secret",
+                count: secretTracks.length,
+                expanded: secretExpanded,
+                onClick: () => setSecretExpanded((current) => !current),
+                children: (
+                  <div className="space-y-3">
+                    {secretTracks.map((track) => (
+                      <div className="achievement-card achievement-card-secret" key={track.id}>
+                        <div className="achievement-secret-icon">?</div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-700">Secret achievement</p>
+                          <p className="mt-1 text-xs text-slate-500">Unlock it to reveal the details.</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
           </div>
         </div>
       )}
