@@ -1,6 +1,9 @@
 export type Profile = {
   timezone: string;
   language: string | null;
+  level: number;
+  currentXp: number;
+  xpRequired: number;
   heightCm: number | null;
   weightKg: number | null;
   goalType: "lose" | "maintain" | "gain" | null;

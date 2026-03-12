@@ -86,6 +86,11 @@ type UnlockCelebration = {
   particles: CelebrationParticle[];
 };
 
+type LevelUpCelebration = {
+  level: number;
+  particles: CelebrationParticle[];
+};
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
@@ -240,6 +245,45 @@ function AchievementUnlockCelebration(props: { celebration: UnlockCelebration | 
   );
 }
 
+function LevelUpOverlay(props: { celebration: LevelUpCelebration | null }) {
+  const { t } = useI18n();
+  if (!props.celebration) return null;
+  return (
+    <div className="achievement-unlock-overlay">
+      <div className="achievement-unlock-particles" aria-hidden="true">
+        {props.celebration.particles.map((particle) => (
+          <span
+            className={`achievement-particle ${particle.rounded ? "achievement-particle-round" : ""}`}
+            key={particle.id}
+            style={
+              {
+                "--particle-color": particle.color,
+                "--particle-size": `${particle.size}px`,
+                "--particle-x": `${particle.x}px`,
+                "--particle-peak-y": `${particle.peakY}px`,
+                "--particle-end-y": `${particle.endY}px`,
+                "--particle-rotation": `${particle.rotation}deg`,
+                "--particle-delay": `${particle.delay}ms`,
+                "--particle-duration": `${particle.duration}ms`
+              } as CSSProperties
+            }
+          />
+        ))}
+      </div>
+      <div className="achievement-unlock-toast achievement-unlock-toast-level">
+        <div className="achievement-unlock-icon achievement-unlock-icon-level" aria-hidden="true">
+          <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
+            <path d="M12 3.25 14.4 8l5.24.76-3.82 3.72.9 5.25L12 15.33 7.28 18l.9-5.25L4.36 8.76 9.6 8 12 3.25Zm0 14.08 1.9 1.08.98-5.72 4.16-4.06-5.75-.84L12 2.62 9.71 7.8l-5.75.84 4.16 4.06-.98 5.72L12 17.33Z" />
+          </svg>
+        </div>
+        <p className="text-sm font-semibold text-ink">{t("celebration.level_up")}</p>
+        <p className="mt-1 text-sm font-semibold text-slate-800">{t("progression.level_label", { level: props.celebration.level })}</p>
+        <p className="mt-1 text-xs text-slate-600">{t("progression.level_up_description")}</p>
+      </div>
+    </div>
+  );
+}
+
 function renderSectionToggle(props: {
   title: string;
   count: number;
@@ -287,9 +331,9 @@ function MacroBar(props: { label: string; value: number; goal: number; color: st
   );
 }
 
-function DashboardView(props: { dashboard: Dashboard; achievements: AchievementsResponse | null }) {
+function DashboardView(props: { dashboard: Dashboard; achievements: AchievementsResponse | null; profile: Profile }) {
   const { t, hasTranslation } = useI18n();
-  const { dashboard, achievements } = props;
+  const { dashboard, achievements, profile } = props;
   const [boardExpanded, setBoardExpanded] = useState(false);
   const [showAllInProgress, setShowAllInProgress] = useState(false);
   const [completedExpanded, setCompletedExpanded] = useState(false);
@@ -328,6 +372,25 @@ function DashboardView(props: { dashboard: Dashboard; achievements: Achievements
         <p className="text-sm text-slate-500">{t("summary.goal", { calories: dashboard.goals.calories })}</p>
         <div className="mt-4 h-3 rounded-full bg-slate-100">
           <div className="h-3 rounded-full bg-primary" style={{ width: `${kcalPercent}%` }} />
+        </div>
+      </div>
+      <div className="rounded-3xl bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-ink">{t("progression.level_label", { level: profile.level })}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {t("progression.xp_progress", { current: profile.currentXp, required: profile.xpRequired })}
+            </p>
+          </div>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+            {t("progression.xp_short", { current: profile.currentXp, required: profile.xpRequired })}
+          </span>
+        </div>
+        <div className="mt-4 h-3 rounded-full bg-slate-100">
+          <div
+            className="h-3 rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500"
+            style={{ width: `${Math.min(100, Math.round((profile.currentXp / Math.max(profile.xpRequired, 1)) * 100))}%` }}
+          />
         </div>
       </div>
       <div className="grid grid-cols-3 gap-3">
@@ -1377,6 +1440,8 @@ export function App() {
   const [achievements, setAchievements] = useState<AchievementsResponse | null>(null);
   const [celebrationQueue, setCelebrationQueue] = useState<Achievement[]>([]);
   const [activeCelebration, setActiveCelebration] = useState<UnlockCelebration | null>(null);
+  const [levelUpQueue, setLevelUpQueue] = useState<number[]>([]);
+  const [activeLevelUp, setActiveLevelUp] = useState<LevelUpCelebration | null>(null);
   const [meals, setMeals] = useState<Meal[]>([]);
   const [onboardingForm, setOnboardingForm] = useState<OnboardingForm>({
     timezone: "UTC",
@@ -1418,6 +1483,7 @@ export function App() {
   const selectedDate = todayIso();
   const scanCancelledRef = useRef(false);
   const unlockedAchievementKeysRef = useRef<Set<string> | null>(null);
+  const previousLevelRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
@@ -1445,6 +1511,23 @@ export function App() {
     };
   }, [activeCelebration]);
 
+  useEffect(() => {
+    if (activeLevelUp || levelUpQueue.length === 0) return;
+    const [nextLevel, ...restQueue] = levelUpQueue;
+    setLevelUpQueue(restQueue);
+    setActiveLevelUp({ level: nextLevel, particles: createCelebrationParticles() });
+  }, [activeLevelUp, levelUpQueue]);
+
+  useEffect(() => {
+    if (!activeLevelUp) return;
+    const timeoutId = window.setTimeout(() => {
+      setActiveLevelUp(null);
+    }, 2400);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [activeLevelUp]);
+
   async function loadAll() {
     setError(null);
     const [profileData, goalsData, dashboardData, mealsData, achievementsData] = await Promise.all([
@@ -1463,6 +1546,12 @@ export function App() {
       }
     }
     unlockedAchievementKeysRef.current = unlockedKeys;
+    const previousLevel = previousLevelRef.current;
+    if (previousLevel !== null && profileData.level > previousLevel) {
+      const nextLevels = Array.from({ length: profileData.level - previousLevel }, (_, index) => previousLevel + index + 1);
+      setLevelUpQueue((current) => [...current, ...nextLevels]);
+    }
+    previousLevelRef.current = profileData.level;
     setPreferredLocale(profileData.language);
     setProfile(profileData);
     setDashboard(dashboardData);
@@ -1832,6 +1921,7 @@ export function App() {
   return (
     <div className="mx-auto min-h-screen max-w-md bg-surface px-4 pb-28 pt-6">
       <AchievementUnlockCelebration celebration={activeCelebration} />
+      <LevelUpOverlay celebration={activeLevelUp} />
       <header className="mb-4">
         <p className="text-xs uppercase tracking-wide text-slate-500">{t("app.subtitle")}</p>
         <h1 className="text-2xl font-bold text-ink">{t("app.title")}</h1>
@@ -1852,7 +1942,7 @@ export function App() {
 
       {!loading && dashboard && (
         <>
-          {tab === "dashboard" && <DashboardView achievements={achievements} dashboard={dashboard} />}
+          {tab === "dashboard" && profile && <DashboardView achievements={achievements} dashboard={dashboard} profile={profile} />}
           {tab === "daily-log" && (
             <DailyLogView
               deletingMealId={deletingMealId}

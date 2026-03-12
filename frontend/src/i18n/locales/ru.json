@@ -75,7 +75,14 @@
     "tiers": "{count}/{total} уровней"
   },
   "celebration": {
-    "unlocked": "Ачивка выполнена!"
+    "unlocked": "Ачивка выполнена!",
+    "level_up": "Новый уровень!"
+  },
+  "progression": {
+    "level_label": "Уровень {level}",
+    "xp_progress": "{current} / {required} XP",
+    "xp_short": "{current}/{required} XP",
+    "level_up_description": "Ты набрал достаточно XP для нового уровня."
   },
   "daily_log": {
     "title": "Дневник",

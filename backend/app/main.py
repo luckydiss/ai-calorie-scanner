@@ -22,6 +22,7 @@ from .ai import AISettings, OpenRouterClient
 from .config import Settings, get_settings
 from .db import DBConnection, connect, init_db, transaction
 from .metrics import MetricsStore
+from .progression import LevelProgressOut, award_progress_for_meal, get_progression
 from .rate_limit import InMemoryRateLimiter
 from .telegram_auth import TelegramAuthError, verify_init_data
 
@@ -56,7 +57,7 @@ class LogoutRequest(BaseModel):
     refreshToken: str | None = None
 
 
-class ProfileOut(BaseModel):
+class ProfileOut(LevelProgressOut):
     timezone: str
     language: str | None = None
     heightCm: int | None = None
@@ -194,7 +195,29 @@ def row_to_profile(row: RowData) -> ProfileOut:
         heightCm=row["height_cm"],
         weightKg=row["weight_kg"],
         goalType=row["goal_type"],
+        level=int(row.get("level") or 1),
+        currentXp=int(row.get("current_xp") or 0),
+        xpRequired=int(row.get("xp_required") or (100 + int(row.get("level") or 1) * 50)),
     )
+
+
+def fetch_profile_row(conn: DBConnection, user_id: str) -> RowData:
+    progress = get_progression(conn, user_id)
+    row = conn.execute(
+        """
+        SELECT *
+        FROM profiles
+        WHERE user_id = ?
+        """,
+        (user_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    merged = dict(row)
+    merged["level"] = progress.level
+    merged["current_xp"] = progress.currentXp
+    merged["xp_required"] = progress.xpRequired
+    return merged
 
 
 def row_to_meal(conn: DBConnection, row: RowData) -> MealOut:
@@ -575,6 +598,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 """,
                 (user_id, dt_to_str(now), dt_to_str(now)),
             )
+            conn.execute(
+                """
+                INSERT INTO user_progression(user_id, level, current_xp, created_at, updated_at)
+                VALUES (?, 1, 0, ?, ?)
+                ON CONFLICT (user_id) DO NOTHING
+                """,
+                (user_id, dt_to_str(now), dt_to_str(now)),
+            )
 
         access_token = str(uuid.uuid4())
         refresh_token = str(uuid.uuid4())
@@ -654,10 +685,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         user: RowData = Depends(get_current_user),
         conn: DBConnection = Depends(get_conn),
     ) -> ProfileOut:
-        row = conn.execute("SELECT * FROM profiles WHERE user_id = ?", (user["id"],)).fetchone()
-        if not row:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
-        return row_to_profile(row)
+        return row_to_profile(fetch_profile_row(conn, user["id"]))
 
     @app.put("/profile", response_model=ProfileOut)
     def update_profile(
@@ -665,7 +693,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         user: RowData = Depends(get_current_user),
         conn: DBConnection = Depends(get_conn),
     ) -> ProfileOut:
-        row = conn.execute("SELECT * FROM profiles WHERE user_id = ?", (user["id"],)).fetchone()
+        row = fetch_profile_row(conn, user["id"])
         if not row:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
         data = row_to_profile(row).model_dump()
@@ -685,8 +713,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 """,
                 (data["timezone"], language, data["heightCm"], data["weightKg"], goal, now, user["id"]),
             )
-        new_row = conn.execute("SELECT * FROM profiles WHERE user_id = ?", (user["id"],)).fetchone()
-        return row_to_profile(new_row)
+        return row_to_profile(fetch_profile_row(conn, user["id"]))
 
     @app.get("/goals", response_model=DailyGoal)
     def get_goals(
@@ -793,6 +820,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         item.confidence,
                     ),
                 )
+        _ = award_progress_for_meal(conn, user["id"], meal_id)
         _ = evaluate_and_unlock_achievements(conn, user["id"])
         row = conn.execute("SELECT * FROM meals WHERE id = ?", (meal_id,)).fetchone()
         return row_to_meal(conn, row)
@@ -1097,6 +1125,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "UPDATE scan_jobs SET confirmed_at = ?, updated_at = ? WHERE id = ?",
                 (now, now, scan_id),
             )
+        _ = award_progress_for_meal(conn, user["id"], meal_id)
         _ = evaluate_and_unlock_achievements(conn, user["id"])
 
         row = conn.execute("SELECT * FROM meals WHERE id = ?", (meal_id,)).fetchone()

@@ -75,7 +75,14 @@
     "tiers": "{count}/{total} tiers"
   },
   "celebration": {
-    "unlocked": "Achievement unlocked!"
+    "unlocked": "Achievement unlocked!",
+    "level_up": "Level up!"
+  },
+  "progression": {
+    "level_label": "Level {level}",
+    "xp_progress": "{current} / {required} XP",
+    "xp_short": "{current}/{required} XP",
+    "level_up_description": "You earned enough XP to reach the next level."
   },
   "daily_log": {
     "title": "Daily Log",

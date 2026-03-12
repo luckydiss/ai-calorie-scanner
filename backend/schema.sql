@@ -20,6 +20,14 @@ CREATE TABLE profiles (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE user_progression (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  level INTEGER NOT NULL DEFAULT 1 CHECK (level >= 1),
+  current_xp INTEGER NOT NULL DEFAULT 0 CHECK (current_xp >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE daily_goals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

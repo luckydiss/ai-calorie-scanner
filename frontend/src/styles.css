@@ -319,6 +319,15 @@ body {
   background: linear-gradient(180deg, rgba(219, 234, 254, 0.95), rgba(191, 219, 254, 0.9));
 }
 
+.achievement-unlock-toast-level {
+  border-color: rgba(251, 191, 36, 0.5);
+}
+
+.achievement-unlock-icon-level {
+  color: #b45309;
+  background: linear-gradient(180deg, rgba(254, 240, 138, 0.95), rgba(252, 211, 77, 0.9));
+}
+
 @keyframes achievement-burst {
   0% {
     opacity: 0;

@@ -62,6 +62,7 @@ def _reset_db(database_url: str) -> None:
                 """
                 TRUNCATE TABLE
                   events,
+                  user_progression,
                   user_achievements,
                   achievements,
                   streaks,
@@ -126,6 +127,9 @@ def test_profile_and_goals_flow() -> None:
         assert profile.status_code == 200
         assert profile.json()["timezone"] == "UTC"
         assert profile.json()["language"] is None
+        assert profile.json()["level"] == 1
+        assert profile.json()["currentXp"] == 0
+        assert profile.json()["xpRequired"] == 150
 
         updated = client.put(
             "/profile",
@@ -136,6 +140,7 @@ def test_profile_and_goals_flow() -> None:
         assert updated.json()["timezone"] == "Europe/Moscow"
         assert updated.json()["language"] == "ru"
         assert updated.json()["goalType"] == "maintain"
+        assert updated.json()["level"] == 1
 
         goal_set = client.put(
             "/goals",
@@ -171,6 +176,10 @@ def test_meals_and_dashboard_flow() -> None:
         assert meals.status_code == 200
         assert len(meals.json()["items"]) == 1
 
+        profile = client.get("/profile", headers=headers)
+        assert profile.status_code == 200
+        assert profile.json()["currentXp"] == 20
+
         dashboard = client.get("/dashboard", params={"date": "2026-03-10"}, headers=headers)
         assert dashboard.status_code == 200
         assert dashboard.json()["totals"]["calories"] == 310
@@ -185,6 +194,38 @@ def test_meals_and_dashboard_flow() -> None:
 
         deleted = client.delete(f"/meals/{meal_id}", headers=headers)
         assert deleted.status_code == 204
+
+
+def test_progression_awards_day_completion_and_weekly_goal_levels_up() -> None:
+    with make_client() as client:
+        headers = auth_headers(client)
+
+        for day_index in range(5):
+            current_day = date(2026, 3, 9 + day_index)
+            for meal_index, hour in enumerate((8, 13, 19), start=1):
+                payload = {
+                    "title": f"Meal {day_index}-{meal_index}",
+                    "mealType": "breakfast" if meal_index == 1 else "lunch" if meal_index == 2 else "dinner",
+                    "eatenAt": datetime(current_day.year, current_day.month, current_day.day, hour, 0).isoformat() + "Z",
+                    "items": [
+                        {
+                            "name": f"Item {day_index}-{meal_index}",
+                            "calories": 200,
+                            "proteinG": 10,
+                            "carbsG": 20,
+                            "fatG": 5,
+                        }
+                    ],
+                }
+                resp = client.post("/meals", json=payload, headers=headers)
+                assert resp.status_code == 201
+
+        profile = client.get("/profile", headers=headers)
+        assert profile.status_code == 200
+        payload = profile.json()
+        assert payload["level"] == 4
+        assert payload["currentXp"] == 70
+        assert payload["xpRequired"] == 300
 
 
 def test_scan_job_created_and_marked_failed_without_key() -> None:
