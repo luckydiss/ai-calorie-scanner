@@ -214,3 +214,109 @@ body {
   font-size: 0.75rem;
   font-weight: 600;
 }
+
+.achievement-unlock-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+}
+
+.achievement-unlock-particles {
+  position: absolute;
+  inset: 0;
+}
+
+.achievement-particle {
+  position: absolute;
+  left: 50%;
+  bottom: -16px;
+  height: var(--particle-size);
+  width: calc(var(--particle-size) * 0.72);
+  background: var(--particle-color);
+  border-radius: 2px;
+  opacity: 0;
+  transform: translateX(-50%) translateY(0) rotate(0deg);
+  animation: achievement-burst var(--particle-duration) ease-out var(--particle-delay) forwards;
+}
+
+.achievement-particle-round {
+  border-radius: 9999px;
+}
+
+.achievement-unlock-toast {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: min(280px, calc(100vw - 48px));
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(147, 197, 253, 0.5);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  padding: 1rem 1rem 0.95rem;
+  text-align: center;
+  opacity: 0;
+  animation: achievement-toast 1180ms ease-out forwards;
+  backdrop-filter: blur(10px);
+}
+
+.achievement-unlock-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.75rem;
+  width: 2.75rem;
+  border-radius: 9999px;
+  margin: 0 auto 0.65rem;
+  color: #1d4ed8;
+  background: linear-gradient(180deg, rgba(219, 234, 254, 0.95), rgba(191, 219, 254, 0.9));
+}
+
+@keyframes achievement-burst {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(0) rotate(0deg) scale(0.8);
+  }
+  10% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 1;
+    transform:
+      translateX(calc(-50% + var(--particle-x)))
+      translateY(var(--particle-peak-y))
+      rotate(calc(var(--particle-rotation) * 0.72))
+      scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform:
+      translateX(calc(-50% + var(--particle-x)))
+      translateY(var(--particle-end-y))
+      rotate(var(--particle-rotation))
+      scale(0.92);
+  }
+}
+
+@keyframes achievement-toast {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 16px)) scale(0.94);
+  }
+  14% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% - 10px)) scale(0.98);
+  }
+}

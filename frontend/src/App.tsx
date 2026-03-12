@@ -1,4 +1,4 @@
-import { FormEvent, TouchEvent, useEffect, useRef, useState, type ReactNode } from "react";
+import { FormEvent, TouchEvent, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   api,
   type Achievement,
@@ -64,6 +64,24 @@ type AchievementTrack = {
   isCompleted: boolean;
   isSecret: boolean;
   latestUnlockedAt: string | null;
+};
+
+type CelebrationParticle = {
+  id: number;
+  color: string;
+  size: number;
+  x: number;
+  peakY: number;
+  endY: number;
+  rotation: number;
+  delay: number;
+  duration: number;
+  rounded: boolean;
+};
+
+type UnlockCelebration = {
+  achievement: Achievement;
+  particles: CelebrationParticle[];
 };
 
 function formatTime(iso: string): string {
@@ -156,6 +174,66 @@ function buildAchievementTracks(items: Achievement[]): AchievementTrack[] {
 function achievementProgressPercent(track: AchievementTrack): number {
   if (track.target <= 0) return 0;
   return Math.min(100, Math.round((track.progress / track.target) * 100));
+}
+
+function createCelebrationParticles(): CelebrationParticle[] {
+  const colors = ["#2563eb", "#38bdf8", "#10b981", "#f59e0b", "#fb7185", "#8b5cf6"];
+  const count = 32;
+  return Array.from({ length: count }, (_, index) => {
+    const spread = (Math.random() - 0.5) * 260;
+    const peakY = -260 - Math.random() * 140;
+    const endY = peakY + 110 + Math.random() * 80;
+    return {
+      id: index,
+      color: colors[index % colors.length],
+      size: 6 + Math.round(Math.random() * 6),
+      x: spread,
+      peakY,
+      endY,
+      rotation: -160 + Math.random() * 320,
+      delay: Math.round(Math.random() * 90),
+      duration: 900 + Math.round(Math.random() * 220),
+      rounded: Math.random() > 0.45
+    };
+  });
+}
+
+function AchievementUnlockCelebration(props: { celebration: UnlockCelebration | null }) {
+  if (!props.celebration) return null;
+  return (
+    <div className="achievement-unlock-overlay">
+      <div className="achievement-unlock-particles" aria-hidden="true">
+        {props.celebration.particles.map((particle) => (
+          <span
+            className={`achievement-particle ${particle.rounded ? "achievement-particle-round" : ""}`}
+            key={particle.id}
+            style={
+              {
+                "--particle-color": particle.color,
+                "--particle-size": `${particle.size}px`,
+                "--particle-x": `${particle.x}px`,
+                "--particle-peak-y": `${particle.peakY}px`,
+                "--particle-end-y": `${particle.endY}px`,
+                "--particle-rotation": `${particle.rotation}deg`,
+                "--particle-delay": `${particle.delay}ms`,
+                "--particle-duration": `${particle.duration}ms`
+              } as CSSProperties
+            }
+          />
+        ))}
+      </div>
+      <div className="achievement-unlock-toast">
+        <div className="achievement-unlock-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
+            <path d="M12 2.75a.75.75 0 0 1 .69.45l2.04 4.78 5.17.42a.75.75 0 0 1 .43 1.31l-3.93 3.38 1.18 5.02a.75.75 0 0 1-1.12.8L12 16.53l-4.46 2.63a.75.75 0 0 1-1.12-.8l1.18-5.02-3.93-3.38a.75.75 0 0 1 .43-1.31l5.17-.42 2.04-4.78a.75.75 0 0 1 .69-.45Z" />
+          </svg>
+        </div>
+        <p className="text-sm font-semibold text-ink">Achievement unlocked!</p>
+        <p className="mt-1 text-sm font-semibold text-slate-800">{props.celebration.achievement.title}</p>
+        <p className="mt-1 text-xs text-slate-600">{props.celebration.achievement.description}</p>
+      </div>
+    </div>
+  );
 }
 
 function renderSectionToggle(props: {
@@ -1205,6 +1283,8 @@ export function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [achievements, setAchievements] = useState<AchievementsResponse | null>(null);
+  const [celebrationQueue, setCelebrationQueue] = useState<Achievement[]>([]);
+  const [activeCelebration, setActiveCelebration] = useState<UnlockCelebration | null>(null);
   const [meals, setMeals] = useState<Meal[]>([]);
   const [onboardingForm, setOnboardingForm] = useState<OnboardingForm>({
     timezone: "UTC",
@@ -1244,12 +1324,33 @@ export function App() {
   });
   const selectedDate = todayIso();
   const scanCancelledRef = useRef(false);
+  const unlockedAchievementKeysRef = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     return () => {
       if (scanPreview) URL.revokeObjectURL(scanPreview);
     };
   }, [scanPreview]);
+
+  useEffect(() => {
+    if (activeCelebration || celebrationQueue.length === 0) return;
+    const [nextAchievement, ...restQueue] = celebrationQueue;
+    setCelebrationQueue(restQueue);
+    setActiveCelebration({
+      achievement: nextAchievement,
+      particles: createCelebrationParticles()
+    });
+  }, [activeCelebration, celebrationQueue]);
+
+  useEffect(() => {
+    if (!activeCelebration) return;
+    const timeoutId = window.setTimeout(() => {
+      setActiveCelebration(null);
+    }, 1200);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [activeCelebration]);
 
   async function loadAll() {
     setError(null);
@@ -1260,6 +1361,15 @@ export function App() {
       api.getMeals(selectedDate),
       api.getAchievements()
     ]);
+    const unlockedKeys = new Set(achievementsData.items.filter((item) => item.unlocked).map((item) => item.key));
+    const previousUnlockedKeys = unlockedAchievementKeysRef.current;
+    if (previousUnlockedKeys) {
+      const newlyUnlocked = achievementsData.items.filter((item) => item.unlocked && !previousUnlockedKeys.has(item.key));
+      if (newlyUnlocked.length > 0) {
+        setCelebrationQueue((current) => [...current, ...newlyUnlocked]);
+      }
+    }
+    unlockedAchievementKeysRef.current = unlockedKeys;
     setProfile(profileData);
     setDashboard(dashboardData);
     setMeals(mealsData.items);
@@ -1626,6 +1736,7 @@ export function App() {
 
   return (
     <div className="mx-auto min-h-screen max-w-md bg-surface px-4 pb-28 pt-6">
+      <AchievementUnlockCelebration celebration={activeCelebration} />
       <header className="mb-4">
         <p className="text-xs uppercase tracking-wide text-slate-500">Telegram Mini App</p>
         <h1 className="text-2xl font-bold text-ink">Calorie Food</h1>
