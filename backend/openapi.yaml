@@ -395,10 +395,19 @@ components:
           nullable: true
     Profile:
       type: object
-      required: [timezone]
+      required: [timezone, level, currentXp, xpRequired, loggedDaysCount, loggedDays]
       properties:
         timezone:
           type: string
+        language:
+          type: string
+          nullable: true
+        level:
+          type: integer
+        currentXp:
+          type: integer
+        xpRequired:
+          type: integer
         heightCm:
           type: integer
           nullable: true
@@ -409,11 +418,19 @@ components:
           type: string
           enum: [lose, maintain, gain]
           nullable: true
+        loggedDaysCount:
+          type: integer
+        loggedDays:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProfileLoggedDay"
     ProfileUpdate:
       type: object
       properties:
         timezone:
           type: string
+        language:
+          type: string
         heightCm:
           type: integer
         weightKg:
@@ -421,6 +438,16 @@ components:
         goalType:
           type: string
           enum: [lose, maintain, gain]
+    ProfileLoggedDay:
+      type: object
+      required: [date, status]
+      properties:
+        date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [green, red]
     DailyGoal:
       type: object
       required: [calories, proteinG, carbsG, fatG]

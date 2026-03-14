@@ -5,7 +5,7 @@ import hmac
 import json
 import os
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from contextlib import contextmanager
@@ -84,6 +84,8 @@ def _migrate_db(database_url: str) -> None:
     root_dir = Path(__file__).resolve().parent.parent
     alembic_cfg = Config(str(root_dir / "alembic.ini"))
     alembic_cfg.set_main_option("sqlalchemy.url", database_url)
+    alembic_cfg.set_main_option("script_location", str(root_dir / "alembic_migrations"))
+    alembic_cfg.set_main_option("prepend_sys_path", str(root_dir))
     command.upgrade(alembic_cfg, "head")
 
 
@@ -130,6 +132,8 @@ def test_profile_and_goals_flow() -> None:
         assert profile.json()["level"] == 1
         assert profile.json()["currentXp"] == 0
         assert profile.json()["xpRequired"] == 150
+        assert profile.json()["loggedDaysCount"] == 0
+        assert profile.json()["loggedDays"] == []
 
         updated = client.put(
             "/profile",
@@ -152,6 +156,56 @@ def test_profile_and_goals_flow() -> None:
         goal_get = client.get("/goals", headers=headers)
         assert goal_get.status_code == 200
         assert goal_get.json()["calories"] == 2100
+
+
+def test_profile_includes_logged_day_statuses() -> None:
+    with make_client() as client:
+        headers = auth_headers(client)
+        base_day = date.today()
+
+        goal_set = client.put(
+            "/goals",
+            json={"calories": 600, "proteinG": 60, "carbsG": 60, "fatG": 20},
+            headers=headers,
+        )
+        assert goal_set.status_code == 200
+
+        green_day_meal = {
+            "title": "Balanced Lunch",
+            "mealType": "lunch",
+            "eatenAt": datetime(base_day.year, base_day.month, base_day.day, 12, 0).isoformat() + "Z",
+            "items": [
+                {"name": "Chicken", "calories": 300, "proteinG": 30, "carbsG": 10, "fatG": 10},
+                {"name": "Rice", "calories": 300, "proteinG": 30, "carbsG": 50, "fatG": 10},
+            ],
+        }
+        red_day_meal = {
+            "title": "Light Snack",
+            "mealType": "snack",
+            "eatenAt": datetime(
+                (base_day + timedelta(days=1)).year,
+                (base_day + timedelta(days=1)).month,
+                (base_day + timedelta(days=1)).day,
+                14,
+                0,
+            ).isoformat()
+            + "Z",
+            "items": [
+                {"name": "Apple", "calories": 120, "proteinG": 1, "carbsG": 20, "fatG": 0},
+            ],
+        }
+
+        assert client.post("/meals", json=green_day_meal, headers=headers).status_code == 201
+        assert client.post("/meals", json=red_day_meal, headers=headers).status_code == 201
+
+        profile = client.get("/profile", headers=headers)
+        assert profile.status_code == 200
+        payload = profile.json()
+        assert payload["loggedDaysCount"] == 2
+        assert payload["loggedDays"] == [
+            {"date": (base_day + timedelta(days=1)).isoformat(), "status": "red"},
+            {"date": base_day.isoformat(), "status": "green"},
+        ]
 
 
 def test_meals_and_dashboard_flow() -> None:
@@ -199,6 +253,7 @@ def test_meals_and_dashboard_flow() -> None:
 def test_progression_awards_day_completion_streak_and_calorie_goal_levels_up() -> None:
     with make_client() as client:
         headers = auth_headers(client)
+        base_day = date.today()
 
         goal_set = client.put(
             "/goals",
@@ -208,7 +263,7 @@ def test_progression_awards_day_completion_streak_and_calorie_goal_levels_up() -
         assert goal_set.status_code == 200
 
         for day_index in range(5):
-            current_day = date(2026, 3, 9 + day_index)
+            current_day = base_day + timedelta(days=day_index)
             for meal_index, hour in enumerate((8, 13, 19), start=1):
                 payload = {
                     "title": f"Meal {day_index}-{meal_index}",
@@ -231,7 +286,7 @@ def test_progression_awards_day_completion_streak_and_calorie_goal_levels_up() -
         assert profile.status_code == 200
         payload = profile.json()
         assert payload["level"] == 2
-        assert payload["currentXp"] == 55
+        assert payload["currentXp"] == 115
         assert payload["xpRequired"] == 200
 
 
@@ -332,6 +387,11 @@ def test_achievements_include_hidden_and_level_tracks() -> None:
 def test_achievements_include_new_daily_challenges() -> None:
     with make_client() as client:
         headers = auth_headers(client)
+        today = date.today()
+        weekday_offset = (3 - today.weekday()) % 7
+        thursday = today + timedelta(days=weekday_offset)
+        friday = thursday + timedelta(days=1)
+        saturday = thursday + timedelta(days=2)
 
         goal_set = client.put(
             "/goals",
@@ -344,7 +404,7 @@ def test_achievements_include_new_daily_challenges() -> None:
             {
                 "title": "Cappuccino",
                 "mealType": "breakfast",
-                "eatenAt": datetime(2026, 3, 12, 9, 0).isoformat() + "Z",
+                "eatenAt": datetime(thursday.year, thursday.month, thursday.day, 9, 0).isoformat() + "Z",
                 "items": [
                     {"name": "Milk", "calories": 30, "proteinG": 2, "carbsG": 4, "fatG": 1},
                 ],
@@ -352,7 +412,7 @@ def test_achievements_include_new_daily_challenges() -> None:
             {
                 "title": "Chicken Rice",
                 "mealType": "lunch",
-                "eatenAt": datetime(2026, 3, 12, 13, 0).isoformat() + "Z",
+                "eatenAt": datetime(thursday.year, thursday.month, thursday.day, 13, 0).isoformat() + "Z",
                 "items": [
                     {"name": "Chicken Rice", "calories": 470, "proteinG": 35, "carbsG": 40, "fatG": 12},
                 ],
@@ -360,7 +420,7 @@ def test_achievements_include_new_daily_challenges() -> None:
             {
                 "title": "Protein Yogurt",
                 "mealType": "snack",
-                "eatenAt": datetime(2026, 3, 12, 16, 30).isoformat() + "Z",
+                "eatenAt": datetime(thursday.year, thursday.month, thursday.day, 16, 30).isoformat() + "Z",
                 "items": [
                     {"name": "Protein Yogurt", "calories": 200, "proteinG": 20, "carbsG": 15, "fatG": 5},
                 ],
@@ -368,7 +428,7 @@ def test_achievements_include_new_daily_challenges() -> None:
             {
                 "title": "Salmon Bowl",
                 "mealType": "dinner",
-                "eatenAt": datetime(2026, 3, 12, 20, 0).isoformat() + "Z",
+                "eatenAt": datetime(thursday.year, thursday.month, thursday.day, 20, 0).isoformat() + "Z",
                 "items": [
                     {"name": "Salmon Bowl", "calories": 300, "proteinG": 20, "carbsG": 20, "fatG": 13},
                 ],
@@ -376,7 +436,7 @@ def test_achievements_include_new_daily_challenges() -> None:
             {
                 "title": "Big Pasta Plate",
                 "mealType": "lunch",
-                "eatenAt": datetime(2026, 3, 13, 12, 0).isoformat() + "Z",
+                "eatenAt": datetime(friday.year, friday.month, friday.day, 12, 0).isoformat() + "Z",
                 "items": [
                     {"name": "Pasta", "calories": 900, "proteinG": 80, "carbsG": 80, "fatG": 30},
                 ],
@@ -384,7 +444,7 @@ def test_achievements_include_new_daily_challenges() -> None:
             {
                 "title": "Saturday Bowl",
                 "mealType": "lunch",
-                "eatenAt": datetime(2026, 3, 14, 12, 0).isoformat() + "Z",
+                "eatenAt": datetime(saturday.year, saturday.month, saturday.day, 12, 0).isoformat() + "Z",
                 "items": [
                     {"name": "Rice Bowl", "calories": 1000, "proteinG": 78, "carbsG": 90, "fatG": 32},
                 ],

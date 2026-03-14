@@ -33,6 +33,8 @@ SCAN_STATUSES = {"queued", "processing", "succeeded", "failed", "cancelled"}
 MAX_SCAN_SIZE_BYTES = 8 * 1024 * 1024
 RowData = Mapping[str, Any]
 logger = logging.getLogger("calorie_food_api")
+GOAL_LOWER_BOUND = 0.85
+GOAL_UPPER_BOUND = 1.15
 
 
 class AuthVerifyRequest(BaseModel):
@@ -63,6 +65,8 @@ class ProfileOut(LevelProgressOut):
     heightCm: int | None = None
     weightKg: float | None = None
     goalType: Literal["lose", "maintain", "gain"] | None = None
+    loggedDaysCount: int = 0
+    loggedDays: list["LoggedDayOut"] = Field(default_factory=list)
 
 
 class ProfileUpdate(BaseModel):
@@ -71,6 +75,11 @@ class ProfileUpdate(BaseModel):
     heightCm: int | None = None
     weightKg: float | None = None
     goalType: Literal["lose", "maintain", "gain"] | None = None
+
+
+class LoggedDayOut(BaseModel):
+    date: date
+    status: Literal["green", "red"]
 
 
 class DailyGoal(BaseModel):
@@ -188,9 +197,84 @@ def parse_unsafe_telegram_init_data(init_data: str) -> dict[str, Any]:
     return parsed
 
 
-def row_to_profile(row: RowData) -> ProfileOut:
+def default_daily_goal() -> DailyGoal:
+    return DailyGoal(calories=2000, proteinG=120, carbsG=200, fatG=70)
+
+
+def row_to_daily_goal(row: RowData | None) -> DailyGoal:
+    if not row:
+        return default_daily_goal()
+    return DailyGoal(
+        calories=int(row["calories"]),
+        proteinG=int(row["protein_g"]),
+        carbsG=int(row["carbs_g"]),
+        fatG=int(row["fat_g"]),
+    )
+
+
+def metric_in_goal_range(actual: int, goal: int) -> bool:
+    if goal <= 0:
+        return actual == goal
+    return goal * GOAL_LOWER_BOUND <= actual <= goal * GOAL_UPPER_BOUND
+
+
+def day_matches_goal(totals: DailyGoal, goal: DailyGoal) -> bool:
+    return all(
+        metric_in_goal_range(getattr(totals, field), getattr(goal, field))
+        for field in ("calories", "proteinG", "carbsG", "fatG")
+    )
+
+
+def fetch_logged_days(conn: DBConnection, user_id: str, timezone_name: str) -> list[LoggedDayOut]:
+    day_rows = conn.execute(
+        """
+        SELECT
+          DATE(m.eaten_at AT TIME ZONE ?) AS local_day,
+          COALESCE(SUM(mi.calories), 0)::int AS calories,
+          COALESCE(SUM(mi.protein_g), 0)::int AS protein_g,
+          COALESCE(SUM(mi.carbs_g), 0)::int AS carbs_g,
+          COALESCE(SUM(mi.fat_g), 0)::int AS fat_g
+        FROM meals m
+        JOIN meal_items mi ON mi.meal_id = m.id
+        WHERE m.user_id = ?
+        GROUP BY local_day
+        ORDER BY local_day DESC
+        """,
+        (timezone_name, user_id),
+    ).fetchall()
+    logged_days: list[LoggedDayOut] = []
+    for row in day_rows:
+        totals = DailyGoal(
+            calories=int(row["calories"]),
+            proteinG=int(row["protein_g"]),
+            carbsG=int(row["carbs_g"]),
+            fatG=int(row["fat_g"]),
+        )
+        goal_row = conn.execute(
+            """
+            SELECT calories, protein_g, carbs_g, fat_g
+            FROM daily_goals
+            WHERE user_id = ? AND effective_from <= ?
+            ORDER BY effective_from DESC
+            LIMIT 1
+            """,
+            (user_id, row["local_day"].isoformat()),
+        ).fetchone()
+        goal = row_to_daily_goal(goal_row)
+        logged_days.append(
+            LoggedDayOut(
+                date=row["local_day"],
+                status="green" if day_matches_goal(totals, goal) else "red",
+            )
+        )
+    return logged_days
+
+
+def build_profile_out(conn: DBConnection, row: RowData) -> ProfileOut:
+    timezone_name = str(row.get("timezone") or "UTC")
+    logged_days = fetch_logged_days(conn, str(row["user_id"]), timezone_name)
     return ProfileOut(
-        timezone=row["timezone"],
+        timezone=timezone_name,
         language=row.get("language"),
         heightCm=row["height_cm"],
         weightKg=row["weight_kg"],
@@ -198,6 +282,8 @@ def row_to_profile(row: RowData) -> ProfileOut:
         level=int(row.get("level") or 1),
         currentXp=int(row.get("current_xp") or 0),
         xpRequired=int(row.get("xp_required") or (100 + int(row.get("level") or 1) * 50)),
+        loggedDaysCount=len(logged_days),
+        loggedDays=logged_days,
     )
 
 
@@ -685,7 +771,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         user: RowData = Depends(get_current_user),
         conn: DBConnection = Depends(get_conn),
     ) -> ProfileOut:
-        return row_to_profile(fetch_profile_row(conn, user["id"]))
+        return build_profile_out(conn, fetch_profile_row(conn, user["id"]))
 
     @app.put("/profile", response_model=ProfileOut)
     def update_profile(
@@ -696,7 +782,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         row = fetch_profile_row(conn, user["id"])
         if not row:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
-        data = row_to_profile(row).model_dump()
+        data = build_profile_out(conn, row).model_dump(exclude={"loggedDays", "loggedDaysCount"})
         patch = payload.model_dump(exclude_unset=True)
         data.update(patch)
         goal = data.get("goalType")
@@ -713,7 +799,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 """,
                 (data["timezone"], language, data["heightCm"], data["weightKg"], goal, now, user["id"]),
             )
-        return row_to_profile(fetch_profile_row(conn, user["id"]))
+        return build_profile_out(conn, fetch_profile_row(conn, user["id"]))
 
     @app.get("/goals", response_model=DailyGoal)
     def get_goals(
@@ -730,14 +816,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             """,
             (user["id"],),
         ).fetchone()
-        if not row:
-            return DailyGoal(calories=2000, proteinG=120, carbsG=200, fatG=70)
-        return DailyGoal(
-            calories=row["calories"],
-            proteinG=row["protein_g"],
-            carbsG=row["carbs_g"],
-            fatG=row["fat_g"],
-        )
+        return row_to_daily_goal(row)
 
     @app.put("/goals", response_model=DailyGoal)
     def put_goals(

@@ -7,6 +7,13 @@ export type Profile = {
   heightCm: number | null;
   weightKg: number | null;
   goalType: "lose" | "maintain" | "gain" | null;
+  loggedDaysCount: number;
+  loggedDays: ProfileLoggedDay[];
+};
+
+export type ProfileLoggedDay = {
+  date: string;
+  status: "green" | "red";
 };
 
 export type Goals = {

@@ -31,7 +31,16 @@
     "daily_log": "Daily Log",
     "quick_add": "Quick Add",
     "add_meal": "Manual",
-    "settings": "Settings"
+    "settings": "Settings",
+    "profile": "Profile"
+  },
+  "profile": {
+    "title": "Profile",
+    "logged_days_count": "{count} logged days",
+    "day_green": "On target",
+    "day_red": "Out of target",
+    "empty_days": "No logged days yet. Add your first meal to start the profile history.",
+    "settings_title": "Settings"
   },
   "meal_type": {
     "breakfast": "Breakfast",

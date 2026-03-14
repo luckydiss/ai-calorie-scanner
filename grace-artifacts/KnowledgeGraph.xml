@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<KnowledgeGraph VERSION="1.0" PROJECT="calorie_food" UPDATED="2026-03-14">
+  <ProjectMeta>
+    <Description>Telegram Mini App for AI-assisted calorie tracking with a FastAPI backend, React frontend, PostgreSQL persistence, and a Telegram bot launcher.</Description>
+    <EntryPoints>
+      <EntryPoint FILE="backend/app/main.py" TYPE="API" />
+      <EntryPoint FILE="backend/app/bot.py" TYPE="Worker" />
+      <EntryPoint FILE="frontend/src/main.tsx" TYPE="GUI" />
+    </EntryPoints>
+    <ArchitecturePattern>Layered monolith with extracted domain subpackages and a single-file frontend shell</ArchitecturePattern>
+  </ProjectMeta>
+  <PlanningArtifacts />
+  <Modules>
+    <Module ID="backend_app_main" FILE="backend/app/main.py" TYPE="Interface" VERSION="2" ANNOTATED="false">
+      <annotation>Primary FastAPI module defining DTOs, app lifecycle, auth, meals, dashboard, scans, profile history, and health endpoints.</annotation>
+      <Classes>
+        <Class NAME="AuthResponse">
+          <annotation>Authentication payload returned after Telegram verification.</annotation>
+        </Class>
+        <Class NAME="ProfileOut">
+          <annotation>Profile response model enriched with progression fields.</annotation>
+        </Class>
+        <Class NAME="MealOut">
+          <annotation>Meal response model with flattened meal items.</annotation>
+        </Class>
+        <Class NAME="ScanStatusResponse">
+          <annotation>Scan job status model with optional AI result payload.</annotation>
+        </Class>
+      </Classes>
+      <CrossLinks>
+        <Link TARGET="backend_app_ai:OpenRouterClient" RELATION="uses" />
+        <Link TARGET="backend_app_config:Settings" RELATION="uses" />
+        <Link TARGET="backend_app_db:DBConnection" RELATION="uses" />
+        <Link TARGET="backend_app_metrics:MetricsStore" RELATION="uses" />
+        <Link TARGET="backend_app_rate_limit:InMemoryRateLimiter" RELATION="uses" />
+        <Link TARGET="backend_app_telegram_auth:TelegramAuthError" RELATION="uses" />
+        <Link TARGET="backend_app_achievements_service" RELATION="uses" />
+        <Link TARGET="backend_app_progression_service" RELATION="uses" />
+        <Link TARGET="UC-auth-bootstrap" RELATION="implements" />
+        <Link TARGET="UC-meal-tracking" RELATION="implements" />
+        <Link TARGET="UC-dashboard" RELATION="implements" />
+        <Link TARGET="UC-ai-scan" RELATION="implements" />
+      </CrossLinks>
+    </Module>
+    <Module ID="backend_app_db" FILE="backend/app/db.py" TYPE="Core" VERSION="1" ANNOTATED="false">
+      <annotation>Database adapter wrapping psycopg connections, query execution, and transaction control.</annotation>
+      <Classes>
+        <Class NAME="DBConnection">
+          <annotation>Thin wrapper normalizing query placeholder style and exposing commit lifecycle methods.</annotation>
+          <Method NAME="execute" SIGNATURE="(query: str, params=())">
+            <annotation>Executes a SQL statement after converting placeholders to psycopg format.</annotation>
+          </Method>
+          <Method NAME="executescript" SIGNATURE="(script: str)">
+            <annotation>Runs semicolon-delimited SQL statements sequentially.</annotation>
+          </Method>
+        </Class>
+      </Classes>
+      <CrossLinks>
+        <Link TARGET="backend_app_config:Settings" RELATION="uses" />
+      </CrossLinks>
+    </Module>
+    <Module ID="backend_app_ai" FILE="backend/app/ai.py" TYPE="Infrastructure" VERSION="1" ANNOTATED="false">
+      <annotation>OpenRouter integration module for nutrition estimation and recalculation requests.</annotation>
+      <Classes>
+        <Class NAME="AISettings">
+          <annotation>Configuration dataclass for the OpenRouter client.</annotation>
+        </Class>
+        <Class NAME="OpenRouterClient">
+          <annotation>Client that formats prompts, calls OpenRouter, and normalizes nutrition output.</annotation>
+          <Method NAME="analyze_food" SIGNATURE="(image_data_url: str, description: str | None = None) -> dict[str, Any]">
+            <annotation>Analyzes a meal photo and returns normalized nutrition data.</annotation>
+          </Method>
+          <Method NAME="analyze_text" SIGNATURE="(description: str) -> dict[str, Any]">
+            <annotation>Estimates nutrition from a text-only meal description.</annotation>
+          </Method>
+          <Method NAME="recalculate" SIGNATURE="(base_result: dict[str, Any], comment: str) -> dict[str, Any]">
+            <annotation>Re-estimates nutrition using a prior result and user correction.</annotation>
+          </Method>
+        </Class>
+      </Classes>
+      <CrossLinks />
+    </Module>
+    <Module ID="backend_app_config" FILE="backend/app/config.py" TYPE="Infrastructure" VERSION="1" ANNOTATED="false">
+      <annotation>Environment-backed settings loader for backend runtime configuration.</annotation>
+      <Classes>
+        <Class NAME="Settings">
+          <annotation>Immutable runtime settings for API, AI provider, database, and retention policy.</annotation>
+        </Class>
+      </Classes>
+      <CrossLinks />
+    </Module>
+    <Module ID="backend_app_metrics" FILE="backend/app/metrics.py" TYPE="Infrastructure" VERSION="1" ANNOTATED="false">
+      <annotation>In-memory metrics registry that renders counters and summaries in Prometheus text format.</annotation>
+      <Classes>
+        <Class NAME="MetricsStore">
+          <annotation>Thread-safe metrics accumulator for request, scan, and recalculate telemetry.</annotation>
+          <Method NAME="inc" SIGNATURE="(name: str, labels: dict[str, str], value: float = 1.0)">
+            <annotation>Increments a labeled counter metric.</annotation>
+          </Method>
+          <Method NAME="observe" SIGNATURE="(name: str, labels: dict[str, str], value: float)">
+            <annotation>Records a labeled observation into summary buckets.</annotation>
+          </Method>
+        </Class>
+      </Classes>
+      <CrossLinks />
+    </Module>
+    <Module ID="backend_app_rate_limit" FILE="backend/app/rate_limit.py" TYPE="Infrastructure" VERSION="1" ANNOTATED="false">
+      <annotation>Simple in-memory sliding-window rate limiter used for auth and scan endpoints.</annotation>
+      <Classes>
+        <Class NAME="InMemoryRateLimiter">
+          <annotation>Stores timestamp queues per key and enforces per-minute request limits.</annotation>
+        </Class>
+      </Classes>
+      <CrossLinks />
+    </Module>
+    <Module ID="backend_app_telegram_auth" FILE="backend/app/telegram_auth.py" TYPE="Infrastructure" VERSION="1" ANNOTATED="false">
+      <annotation>Telegram Mini App initData validator implementing hash and TTL checks.</annotation>
+      <Classes>
+        <Class NAME="TelegramAuthError">
+          <annotation>Raised when Telegram initData is invalid or expired.</annotation>
+        </Class>
+      </Classes>
+      <CrossLinks />
+    </Module>
+    <Module ID="backend_app_bot" FILE="backend/app/bot.py" TYPE="Interface" VERSION="1" ANNOTATED="false">
+      <annotation>Telegram bot worker that publishes the WebApp button and reacts to start commands.</annotation>
+      <Classes />
+      <CrossLinks>
+        <Link TARGET="UC-bot-launcher" RELATION="implements" />
+      </CrossLinks>
+    </Module>
+    <Module ID="backend_app_achievements_definitions" FILE="backend/app/achievements/definitions.py" TYPE="Utility" VERSION="1" ANNOTATED="false">
+      <annotation>Static achievement definitions and keyword groups used by the achievements engine.</annotation>
+      <Classes />
+      <CrossLinks />
+    </Module>
+    <Module ID="backend_app_achievements_schemas" FILE="backend/app/achievements/schemas.py" TYPE="Utility" VERSION="1" ANNOTATED="false">
+      <annotation>Achievement and streak response schemas shared with the API layer.</annotation>
+      <Classes>
+        <Class NAME="StreakOut">
+          <annotation>Represents the current and longest meal logging streak.</annotation>
+        </Class>
+        <Class NAME="AchievementOut">
+          <annotation>Represents a single achievement track and its unlock status.</annotation>
+        </Class>
+        <Class NAME="AchievementsResponse">
+          <annotation>Wraps streak state and the list of achievement progress entries.</annotation>
+        </Class>
+      </Classes>
+      <CrossLinks />
+    </Module>
+    <Module ID="backend_app_achievements_service" FILE="backend/app/achievements/service.py" TYPE="Core" VERSION="1" ANNOTATED="false">
+      <annotation>Achievement engine that computes derived metrics from meal history and unlocks catalog entries.</annotation>
+      <Classes />
+      <CrossLinks>
+        <Link TARGET="backend_app_db:DBConnection" RELATION="uses" />
+        <Link TARGET="backend_app_achievements_definitions" RELATION="uses" />
+        <Link TARGET="backend_app_achievements_schemas:AchievementsResponse" RELATION="uses" />
+        <Link TARGET="UC-achievements" RELATION="implements" />
+      </CrossLinks>
+    </Module>
+    <Module ID="backend_app_achievements_init" FILE="backend/app/achievements/__init__.py" TYPE="Utility" VERSION="1" ANNOTATED="false">
+      <annotation>Package export surface for achievements schemas and evaluation service functions.</annotation>
+      <Classes />
+      <CrossLinks>
+        <Link TARGET="backend_app_achievements_schemas" RELATION="uses" />
+        <Link TARGET="backend_app_achievements_service" RELATION="uses" />
+      </CrossLinks>
+    </Module>
+    <Module ID="backend_app_progression_schemas" FILE="backend/app/progression/schemas.py" TYPE="Utility" VERSION="1" ANNOTATED="false">
+      <annotation>Progression response schema describing current level and XP thresholds.</annotation>
+      <Classes>
+        <Class NAME="LevelProgressOut">
+          <annotation>Represents current level, XP, and XP required for the next level.</annotation>
+        </Class>
+      </Classes>
+      <CrossLinks />
+    </Module>
+    <Module ID="backend_app_progression_service" FILE="backend/app/progression/service.py" TYPE="Core" VERSION="1" ANNOTATED="false">
+      <annotation>Progression engine that awards XP for meals, completed days, streaks, and calorie target hits.</annotation>
+      <Classes>
+        <Class NAME="ProgressionAwardResult">
+          <annotation>Encapsulates updated progression state and whether a level-up occurred.</annotation>
+        </Class>
+      </Classes>
+      <CrossLinks>
+        <Link TARGET="backend_app_db:DBConnection" RELATION="uses" />
+        <Link TARGET="backend_app_progression_schemas:LevelProgressOut" RELATION="uses" />
+        <Link TARGET="UC-progression" RELATION="implements" />
+      </CrossLinks>
+    </Module>
+    <Module ID="backend_app_progression_init" FILE="backend/app/progression/__init__.py" TYPE="Utility" VERSION="1" ANNOTATED="false">
+      <annotation>Package export surface for progression schemas and XP service helpers.</annotation>
+      <Classes />
+      <CrossLinks>
+        <Link TARGET="backend_app_progression_schemas" RELATION="uses" />
+        <Link TARGET="backend_app_progression_service" RELATION="uses" />
+      </CrossLinks>
+    </Module>
+    <Module ID="backend_app_init" FILE="backend/app/__init__.py" TYPE="Utility" VERSION="1" ANNOTATED="false">
+      <annotation>Backend package marker for the application module tree.</annotation>
+      <Classes />
+      <CrossLinks />
+    </Module>
+    <Module ID="frontend_src_main" FILE="frontend/src/main.tsx" TYPE="Interface" VERSION="1" ANNOTATED="false">
+      <annotation>Frontend bootstrap module mounting the app and localization provider into the DOM.</annotation>
+      <Classes />
+      <CrossLinks>
+        <Link TARGET="frontend_src_app" RELATION="uses" />
+        <Link TARGET="frontend_src_i18n_index" RELATION="uses" />
+      </CrossLinks>
+    </Module>
+    <Module ID="frontend_src_app" FILE="frontend/src/App.tsx" TYPE="Core" VERSION="2" ANNOTATED="false">
+      <annotation>Single-file React application shell containing dashboard, daily log, profile/settings, add meal, and scan workflows.</annotation>
+      <Classes />
+      <CrossLinks>
+        <Link TARGET="frontend_src_api" RELATION="uses" />
+        <Link TARGET="frontend_src_i18n_index" RELATION="uses" />
+        <Link TARGET="UC-dashboard" RELATION="implements" />
+        <Link TARGET="UC-meal-tracking" RELATION="implements" />
+        <Link TARGET="UC-ai-scan" RELATION="implements" />
+      </CrossLinks>
+    </Module>
+    <Module ID="frontend_src_api" FILE="frontend/src/api.ts" TYPE="Infrastructure" VERSION="2" ANNOTATED="false">
+      <annotation>Typed fetch client for frontend communication with the FastAPI backend including the expanded profile contract and Telegram auth bootstrap.</annotation>
+      <Classes />
+      <CrossLinks>
+        <Link TARGET="backend_app_main" RELATION="uses" />
+        <Link TARGET="UC-auth-bootstrap" RELATION="implements" />
+      </CrossLinks>
+    </Module>
+    <Module ID="frontend_src_i18n_index" FILE="frontend/src/i18n/index.tsx" TYPE="Utility" VERSION="1" ANNOTATED="false">
+      <annotation>Localization provider loading JSON dictionaries and exposing translation helpers through React context.</annotation>
+      <Classes />
+      <CrossLinks />
+    </Module>
+  </Modules>
+  <BusinessScenarios TYPE="BUSINESS_LOGIC_OVERVIEW">
+    <Scenario UC="UC-auth-bootstrap" NAME="Telegram Mini App authentication bootstrap">
+      <ImplementedBy>
+        <Module REF="frontend_src_api" ROLE="entry-point" />
+        <Module REF="backend_app_main" ROLE="executor" />
+        <Module REF="backend_app_telegram_auth" ROLE="validator" />
+      </ImplementedBy>
+    </Scenario>
+    <Scenario UC="UC-meal-tracking" NAME="Manual meal logging and meal history management">
+      <ImplementedBy>
+        <Module REF="frontend_src_app" ROLE="entry-point" />
+        <Module REF="backend_app_main" ROLE="orchestrator" />
+        <Module REF="backend_app_db" ROLE="repository" />
+        <Module REF="backend_app_progression_service" ROLE="executor" />
+        <Module REF="backend_app_achievements_service" ROLE="executor" />
+      </ImplementedBy>
+    </Scenario>
+    <Scenario UC="UC-dashboard" NAME="Daily dashboard and macro progress">
+      <ImplementedBy>
+        <Module REF="frontend_src_app" ROLE="entry-point" />
+        <Module REF="backend_app_main" ROLE="orchestrator" />
+        <Module REF="backend_app_db" ROLE="repository" />
+      </ImplementedBy>
+    </Scenario>
+    <Scenario UC="UC-ai-scan" NAME="AI scan, recalculate, and confirm meal flow">
+      <ImplementedBy>
+        <Module REF="frontend_src_app" ROLE="entry-point" />
+        <Module REF="backend_app_main" ROLE="orchestrator" />
+        <Module REF="backend_app_ai" ROLE="executor" />
+        <Module REF="backend_app_db" ROLE="repository" />
+        <Module REF="backend_app_progression_service" ROLE="executor" />
+        <Module REF="backend_app_achievements_service" ROLE="executor" />
+      </ImplementedBy>
+    </Scenario>
+    <Scenario UC="UC-achievements" NAME="Achievements board and unlock evaluation">
+      <ImplementedBy>
+        <Module REF="frontend_src_app" ROLE="entry-point" />
+        <Module REF="backend_app_main" ROLE="orchestrator" />
+        <Module REF="backend_app_achievements_service" ROLE="executor" />
+      </ImplementedBy>
+    </Scenario>
+    <Scenario UC="UC-progression" NAME="XP progression and level-up tracking">
+      <ImplementedBy>
+        <Module REF="frontend_src_app" ROLE="entry-point" />
+        <Module REF="backend_app_main" ROLE="orchestrator" />
+        <Module REF="backend_app_progression_service" ROLE="executor" />
+      </ImplementedBy>
+    </Scenario>
+    <Scenario UC="UC-bot-launcher" NAME="Telegram bot launches the mini app">
+      <ImplementedBy>
+        <Module REF="backend_app_bot" ROLE="entry-point" />
+      </ImplementedBy>
+    </Scenario>
+  </BusinessScenarios>
+</KnowledgeGraph>

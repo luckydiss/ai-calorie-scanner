@@ -11,6 +11,7 @@ import {
   type Meal,
   type MealType,
   type Profile,
+  type ProfileLoggedDay,
   type ScanStatus
 } from "./api";
 import { SUPPORTED_LOCALES, useI18n, type SupportedLocale } from "./i18n";
@@ -93,6 +94,10 @@ type LevelUpCelebration = {
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatProfileDay(value: string): string {
+  return new Date(`${value}T00:00:00`).toLocaleDateString([], { day: "2-digit", month: "short" });
 }
 
 function currentDatetimeLocal(): string {
@@ -991,13 +996,32 @@ function DailyLogView(props: {
   );
 }
 
-function OnboardingView(props: {
+function ProfileView(props: {
+  profile: Profile;
   form: OnboardingForm;
   saving: boolean;
   onChange: (patch: Partial<OnboardingForm>) => void;
   onSubmit: () => Promise<void>;
 }) {
   const { t, hasTranslation } = useI18n();
+
+  function renderLoggedDay(day: ProfileLoggedDay) {
+    const isGreen = day.status === "green";
+    return (
+      <div
+        className={`rounded-2xl border px-3 py-2 ${
+          isGreen ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"
+        }`}
+        key={day.date}
+      >
+        <p className="text-sm font-semibold text-ink">{formatProfileDay(day.date)}</p>
+        <p className={`mt-1 text-xs font-semibold ${isGreen ? "text-emerald-700" : "text-rose-700"}`}>
+          {isGreen ? t("profile.day_green") : t("profile.day_red")}
+        </p>
+      </div>
+    );
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     await props.onSubmit();
@@ -1005,7 +1029,24 @@ function OnboardingView(props: {
 
   return (
     <form className="space-y-4 rounded-3xl bg-white p-5 shadow-sm" onSubmit={submit}>
-      <h2 className="text-lg font-semibold text-ink">{t("onboarding.title")}</h2>
+      <div className="rounded-3xl bg-slate-50 p-4">
+        <h2 className="text-lg font-semibold text-ink">{t("profile.title")}</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          {t("profile.logged_days_count", { count: props.profile.loggedDaysCount })}
+        </p>
+        {props.profile.loggedDays.length > 0 ? (
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            {props.profile.loggedDays.map(renderLoggedDay)}
+          </div>
+        ) : (
+          <p className="mt-4 rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
+            {t("profile.empty_days")}
+          </p>
+        )}
+      </div>
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{t("profile.settings_title")}</h3>
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <label className="text-sm text-slate-600">
           {t("onboarding.timezone")}
@@ -2054,8 +2095,9 @@ export function App() {
               onPendingRecalculate={recalculateScan}
             />
           )}
-          {tab === "onboarding" && (
-            <OnboardingView
+          {tab === "onboarding" && profile && (
+            <ProfileView
+              profile={profile}
               form={onboardingForm}
               saving={savingOnboarding}
               onChange={(patch) => {
@@ -2143,7 +2185,7 @@ export function App() {
           onClick={() => setTab("onboarding")}
           type="button"
         >
-          {t("tabs.settings")}
+          {t("tabs.profile")}
         </button>
       </nav>
     </div>
